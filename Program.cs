@@ -27,14 +27,16 @@ namespace deleteSharpDX {
         /// </summary>
         struct MyFuncVertex {
             public Vector3 Position;
+            public Vector4 Color;
             public Vector3 Normal;
             public Vector3 TangentU;
             public Vector2 TexC;
-            public MyFuncVertex(Vector3 pos, Vector3 nor, Vector3 tan, Vector2 tex) {
+            public MyFuncVertex(Vector3 pos, Vector4 color, Vector3 nor, Vector3 tan, Vector2 tex) {
                 Position = pos;
                 Normal = nor;
                 TangentU = tan;
                 TexC = tex;
+                Color = color;
             }
         }
         /// <summary>
@@ -50,7 +52,8 @@ namespace deleteSharpDX {
         }
         MeshData meshData;
         private D3D11.InputElement[] _inputElementsForMesh = new D3D11.InputElement[] {
-                new D3D11.InputElement("POSITION", 0, Format.R32G32B32A32_Float, 0),
+                new D3D11.InputElement("POSITION", 0, Format.R32G32B32_Float, 0),
+                new D3D11.InputElement("COLOR", 0, Format.R32G32B32A32_Float, 0),
                 new D3D11.InputElement("NORMAL", 0, Format.R32G32B32_Float, 0),
                 new D3D11.InputElement("TANGENTU", 0, Format.R32G32B32_Float, 0),
                 new D3D11.InputElement("TEXC", 0, Format.R32G32_Float, 0),
@@ -73,6 +76,8 @@ namespace deleteSharpDX {
         private System.Drawing.Point preMouse;
         private bool _resized;
         private bool rotateFlag;
+        private EffectPass mfxPassW;
+        private EffectPass mfxPassS;
         private EffectPass mfxPass;
         private RenderForm _renderForm;
 
@@ -110,8 +115,10 @@ namespace deleteSharpDX {
             using (var effectByteCode = ShaderBytecode.CompileFromFile("../../MyShader.fx","fx_5_0")) {
                 var effect = new Effect(_d3DDevice, effectByteCode);
                 var technique = effect.GetTechniqueByName("ColorTech");
-                mfxPass = technique.GetPassByIndex(0);
-                var passSignature = mfxPass.Description.Signature;
+                mfxPassW = technique.GetPassByName("P0");
+                mfxPassS = technique.GetPassByName("P1");
+                mfxPass = mfxPassW;
+                var passSignature = mfxPassW.Description.Signature;
                 _inputShaderSignature = ShaderSignature.GetInputSignature(passSignature);
                 mfxWorldViewProj = effect.GetVariableByName("worldViewProj").AsMatrix();
             }
@@ -167,8 +174,10 @@ namespace deleteSharpDX {
                 var viewProj = Matrix.Multiply(view, proj);
                 worldViewProj = world * viewProj;
                 mfxWorldViewProj.SetMatrix(worldViewProj);
-                mfxPass.Apply(_d3DDeviceContext);
-                _d3DDeviceContext.DrawIndexed(meshData.Indices.Length, 0, 0);
+                mfxPassS.Apply(_d3DDeviceContext);
+                _d3DDeviceContext.DrawIndexed(meshData.Indices.Length/2, 0, 0);
+                mfxPassW.Apply(_d3DDeviceContext);
+                _d3DDeviceContext.DrawIndexed(meshData.Indices.Length/2, meshData.Indices.Length / 2, 0);
                 _swapChain.Present(0, PresentFlags.None);
             });
         }
@@ -235,7 +244,13 @@ namespace deleteSharpDX {
                     camPos.Y -= 0.1f;
                     break;
                 case System.Windows.Forms.Keys.Escape:
-                    //_renderForm.Close();
+                    _renderForm.Close();
+                    break;
+                case System.Windows.Forms.Keys.Z:
+                    mfxPass = mfxPassW;
+                    break;
+                case System.Windows.Forms.Keys.X:
+                    mfxPass = mfxPassS;
                     break;
                 default:
                     break;
@@ -259,6 +274,7 @@ namespace deleteSharpDX {
             }
         }
         void GenerateFXY(float xlength, float zlength, int xNum, int zNum) {
+            int index;
             meshData = new MeshData(xNum, zNum);
             var dx = xlength / xNum;
             var dz = zlength / zNum;
@@ -267,16 +283,28 @@ namespace deleteSharpDX {
             var dv = 1f / zNum;
             for (int xIndex = 0; xIndex < xNum; xIndex++) {
                 for (int zIndex = 0; zIndex < zNum; zIndex++) {
+                    index = xIndex * zNum + zIndex;
                     // 位置坐标
-                    meshData.Vertices[xIndex * zNum + zIndex].Position  = new Vector3(xIndex, 0f, zIndex);
+                    meshData.Vertices[index].Position   = new Vector3(xIndex, getNum(xIndex, zIndex), zIndex);
+                    if (meshData.Vertices[index].Position.Y < 5) {
+                        meshData.Vertices[index].Color = new Vector4(1, 1, 1, 1);
+                    } else if (meshData.Vertices[index].Position.Y < 10) {
+                        meshData.Vertices[index].Color = new Vector4(1, 0, 1, 1);
+                    } else if (meshData.Vertices[index].Position.Y < 15) {
+                        meshData.Vertices[index].Color = new Vector4(1, 1, 0, 1);
+                    }
                     // 光照
-                    meshData.Vertices[xIndex * zNum + zIndex].Normal    = new Vector3(0f, 1f, 0f);
-                    meshData.Vertices[xIndex * zNum + zIndex].TangentU  = new Vector3(1f, 0f, 0f);
-                    // 纹理坐标                
-                    meshData.Vertices[xIndex * zNum + zIndex].TexC.X    = xIndex * du;
-                    meshData.Vertices[xIndex * zNum + zIndex].TexC.Y    = zIndex * dv;
+                    meshData.Vertices[index].Normal     = new Vector3(0f, 1f, 0f);
+                    meshData.Vertices[index].TangentU   = new Vector3(1f, 0f, 0f);
+                    // 纹理坐标
+                    meshData.Vertices[index].TexC.X     = xIndex * du;
+                    meshData.Vertices[index].TexC.Y     = zIndex * dv;
                 }
             }
+        }
+
+        float getNum(float x, float z) {
+            return (float)Math.Sqrt(x * x + z * z);
         }
         #endregion
     }
