@@ -318,3 +318,52 @@ RenderLoop.Run(_renderForm, () => {
 }
 ```
 **注意**：前面那些没有使用Effect改变wvp矩阵的代码中先将wvp矩阵转置了一次。这里不需要转置。
+
+### Effect文件的编译方法
+- 运行时编译，以上我们讲述的过程都是在程序运行时编译的
+- 离线编译，利用Windows SDK自带的fxc编译器，可以自行编译成字节码，在程序中读取即可。
+```
+fxc /Fc /Od /Zi /T fx_5_0 /Fo "%(RelativeDir)\%(Filename).fxo" "%(FullPath)"
+```
+编译成功后的输出信息，包含编译后代码(.cod)及object文件(.fxo)：
+```
+compilation code save succeeded; see myShader.cod
+compilation object save succeeded; see D:\myShader.fxo
+```
+通常fxc编译过程会暴露更多的warning和error信息。注意.fx文件的**编码格式**，否则编译器会发出"Ilegal char"报错(https://www.gamedev.net/forums/topic/668230-directx-11-frank-luna)。
+
+软件只需要.fxo文件即可运行。但.cod汇编文件可以给我们更多的参考价值。
+
+### 像素着色器的uniform参数
+该参数不会跟随像素变化而变化，始终是一致的。在编译时已经是定值，不需要运行时改变。如下述代码，根据**gApplyTexture**参数的值选择贴纹理/不贴：
+```c
+float4 PS_Tex(PS_IN pin, uniform bool gApplyTexture) : SV_Target
+{
+	//Do Common Work
+	if (gApplyTexture)
+	{
+		//Apply texture
+	}
+	//Do more work
+}
+
+// 不使用纹理--传入false
+technique11 BasicTech
+{
+	pass P0
+	{
+		SetVertexShader(CompileShader(vs_5_0, VS()));
+		SetPixelShader(CompileShader(ps_5_0, PS_Tex(false)));
+	}
+}
+
+// 使用纹理--传入true
+technique11 TextureTech
+{
+	pass P0
+	{
+		SetVertexShader(CompileShader(vs_5_0, VS()));
+		SetPixelShader(CompileShader(ps_5_0, PS_Tex(true)));
+	}
+}
+```

@@ -29,6 +29,36 @@ float4 PS(PS_IN input) : SV_Target
 	return input.col;
 }
 
+float4 PS_Tex(PS_IN pin, uniform bool gApplyTexture) : SV_Target
+{
+	//Do Common Work
+	if (gApplyTexture)
+	{
+		//Apply texture
+	}
+	//Do more work
+	return float4(0, 0, 0, 0);
+}
+
+technique11 BasicTech
+{
+	pass P0
+	{
+		SetVertexShader(CompileShader(vs_5_0, VS()));
+		SetPixelShader(CompileShader(ps_5_0, PS_Tex(false)));
+	}
+}
+
+technique11 TextureTech
+{
+	pass P0
+	{
+		SetVertexShader(CompileShader(vs_5_0, VS()));
+		SetPixelShader(CompileShader(ps_5_0, PS_Tex(true)));
+	}
+}
+
+
 RasterizerState WireFrameRS
 {
 	FillMode = Wireframe;

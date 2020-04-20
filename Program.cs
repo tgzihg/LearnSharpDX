@@ -107,7 +107,7 @@ namespace deleteSharpDX {
             _d3DDeviceContext = _d3DDevice.ImmediateContext;
             using (var effectByteCode = ShaderBytecode.CompileFromFile("../../MyShader.fx","fx_5_0")) {
                 var effect = new Effect(_d3DDevice, effectByteCode);
-                var technique = effect.GetTechniqueByIndex(0);
+                var technique = effect.GetTechniqueByName("ColorTech");
                 mfxPass = technique.GetPassByIndex(0);
                 var passSignature = mfxPass.Description.Signature;
                 _inputShaderSignature = ShaderSignature.GetInputSignature(passSignature);
