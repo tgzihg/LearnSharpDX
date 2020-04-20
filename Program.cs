@@ -5,12 +5,13 @@ using SharpDX.D3DCompiler;
 using D3D11 = SharpDX.Direct3D11;
 using SharpDX.Direct3D11;
 using SharpDX;
+using System.Windows.Forms;
 
 namespace deleteSharpDX {
     class Program {
         static void Main(string[] args) {
-            using (var temp = new MySharpDXForm()) {
-            }
+            Application.Run(new DemoForm());
+
         }
     }
     class MySharpDXForm : IDisposable {
@@ -77,7 +78,7 @@ namespace deleteSharpDX {
         /// <summary>
         /// 初始化
         /// </summary>
-        public MySharpDXForm() {
+        public MySharpDXForm(IntPtr showHandle) {
             GenerateFXY(5f, 5f, 10, 10);
             GenerateMesh(10, 10);
             _renderForm = new RenderForm();
@@ -95,7 +96,7 @@ namespace deleteSharpDX {
                 SampleDescription = new SampleDescription(1, 0),
                 Usage = Usage.RenderTargetOutput,
                 BufferCount = 1,
-                OutputHandle = _renderForm.Handle,
+                OutputHandle = showHandle,
                 IsWindowed = true,
                 Flags = SwapChainFlags.AllowModeSwitch,
                 SwapEffect = SwapEffect.Discard,
