@@ -11,42 +11,13 @@ using SharpDX.Direct3D11;
 using SharpDX;
 using SharpDX.Mathematics.Interop;
 using System.Diagnostics;
-
 using System.Runtime.InteropServices;
 
 namespace deleteSharpDX {
     class Program {
         static void Main(string[] args) {
-            Console.WriteLine("---网格生成与显示工具---");
-            Console.WriteLine("----------说明---------");
-            Console.WriteLine("-输入参数：生成的二维网格数");
-            Console.WriteLine("-位置移动：深度方向W、S键，横向A，D键，纵向Q，E键");
-            Console.WriteLine("-视角移动：鼠标按下->拖拽鼠标->松开鼠标");
-            Console.WriteLine("-显示方式：试着按下P(Point)、L(Line)、T(Triangle)切换吧！");
-            Console.WriteLine("-如何关闭：默认是窗口显示，ESC键退出");
-            Console.WriteLine("---------------------");
-            Console.WriteLine("请先读完上述！");
-            Console.WriteLine("---------------------");
-            Console.WriteLine("生成的网格数之 X轴：");
-            var xnum = Console.ReadLine();
-            int XNUM;
-            var result = int.TryParse(xnum, out XNUM);
-            if (!result) {
-                Console.WriteLine("输入错误");
-                return;
+            using (var temp = new MySharpDXForm()) {
             }
-            Console.WriteLine("生成的网格数之 Y轴：");
-            int ZNUM;
-            var znum = Console.ReadLine();
-            result = int.TryParse(znum, out ZNUM);
-            if (!result) {
-                Console.WriteLine("输入错误");
-                return;
-            }
-            using (var temp = new MySharpDXForm(XNUM + 1, ZNUM + 1)) {
-            }
-            Console.WriteLine("感谢使用，任意键退出...");
-            Console.ReadKey();
         }
     }
     class MySharpDXForm : IDisposable {
@@ -81,11 +52,9 @@ namespace deleteSharpDX {
         /// <summary>
         /// 初始化
         /// </summary>
-        public MySharpDXForm(int xNUM, int zNUM) {
-            //GenerateFXY(5f, 5f, 10, 10);
-            //GenerateMesh(10, 10);
-            GenerateFXY(5f, 5f, xNUM, zNUM);
-            GenerateMesh(xNUM, zNUM);
+        public MySharpDXForm() {
+            GenerateFXY(5f, 5f, 10, 10);
+            GenerateMesh(10, 10);
             _renderForm = new RenderForm();
             //窗体事件
             _renderForm.KeyDown += _renderForm_KeyDown;
