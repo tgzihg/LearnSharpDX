@@ -15,7 +15,6 @@ namespace deleteSharpDX {
         }
     }
     class MySharpDXForm : IDisposable {
-        private RenderForm _renderForm;
         private D3D11.Device _d3DDevice;
         private D3D11.DeviceContext _d3DDeviceContext;
         private SwapChain _swapChain;
@@ -78,12 +77,10 @@ namespace deleteSharpDX {
         /// <summary>
         /// 初始化
         /// </summary>
-        public MySharpDXForm(IntPtr showHandle) {
+        public MySharpDXForm(RenderForm _renderForm) {
             GenerateFXY(5f, 5f, 10, 10);
             GenerateMesh(10, 10);
-            _renderForm = new RenderForm();
             _renderForm.KeyDown += _renderForm_KeyDown;
-            _renderForm.ClientSize = new System.Drawing.Size(_renderForm.ClientSize.Width, _renderForm.ClientSize.Height);
             _renderForm.Text = "愉快的学习SharpDX";
             _renderForm.Icon = null;
             _renderForm.ResizeBegin += (object sender, EventArgs e) => { _resized = true; };
@@ -96,7 +93,7 @@ namespace deleteSharpDX {
                 SampleDescription = new SampleDescription(1, 0),
                 Usage = Usage.RenderTargetOutput,
                 BufferCount = 1,
-                OutputHandle = showHandle,
+                OutputHandle = _renderForm.Handle,
                 IsWindowed = true,
                 Flags = SwapChainFlags.AllowModeSwitch,
                 SwapEffect = SwapEffect.Discard,
@@ -175,7 +172,6 @@ namespace deleteSharpDX {
             _swapChain.Dispose();
             _d3DDevice.Dispose();
             _d3DDeviceContext.Dispose();
-            _renderForm.Dispose();
         }
         #region Some Unimmportant Methods
         private void _renderForm_MouseUp(object sender, System.Windows.Forms.MouseEventArgs e) {
@@ -235,7 +231,7 @@ namespace deleteSharpDX {
                     camPos.Y -= 0.1f;
                     break;
                 case System.Windows.Forms.Keys.Escape:
-                    _renderForm.Close();
+                    //_renderForm.Close();
                     break;
                 default:
                     break;

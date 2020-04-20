@@ -16,7 +16,12 @@ namespace deleteSharpDX {
         }
 
         private void button1_Click(object sender, EventArgs e) {
-            using (var temp = new MySharpDXForm(showPanel.Handle)) {
+            var showForm = new RenderForm();
+            showForm.TopLevel = false;
+            showForm.FormBorderStyle = FormBorderStyle.None;
+            showForm.ClientSize = new System.Drawing.Size(showPanel.ClientSize.Width, showPanel.ClientSize.Height);
+            showPanel.Controls.Add(showForm);
+            using (var temp = new MySharpDXForm(showForm)) {
             }
         }
     }
