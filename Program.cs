@@ -10,8 +10,9 @@ using System.Windows.Forms;
 namespace deleteSharpDX {
     class Program {
         static void Main(string[] args) {
-            Application.Run(new DemoForm());
+            using (var demo = new MySharpDXForm()) {
 
+            }
         }
     }
     class MySharpDXForm : IDisposable {
@@ -73,13 +74,16 @@ namespace deleteSharpDX {
         private bool _resized;
         private bool rotateFlag;
         private EffectPass mfxPass;
+        private RenderForm _renderForm;
 
         /// <summary>
         /// 初始化
         /// </summary>
-        public MySharpDXForm(RenderForm _renderForm) {
+        public MySharpDXForm() {
             GenerateFXY(5f, 5f, 10, 10);
             GenerateMesh(10, 10);
+            _renderForm = new RenderForm();
+            _renderForm.ClientSize = new System.Drawing.Size(800, 600);
             _renderForm.KeyDown += _renderForm_KeyDown;
             _renderForm.Text = "愉快的学习SharpDX";
             _renderForm.Icon = null;
