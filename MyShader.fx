@@ -1,4 +1,6 @@
-﻿float4x4 worldViewProj;
+﻿cbuffer cbPerObject {
+	float4x4 worldViewProj;
+};
 
 struct VS_IN
 {
@@ -17,7 +19,6 @@ struct PS_IN
 PS_IN VS(VS_IN input)
 {
 	PS_IN output = (PS_IN)0;
-	//output.pos = mul(float4(input.pos, 1.0f), worldViewProj);
 	output.pos = mul(float4(input.pos, 1.0f), worldViewProj);
 	output.col = float4(input.nor, 1.0f);
 	return output;
@@ -26,4 +27,21 @@ PS_IN VS(VS_IN input)
 float4 PS(PS_IN input) : SV_Target
 {
 	return input.col;
+}
+
+RasterizerState WireFrameRS
+{
+	FillMode = Wireframe;
+	CullMode = Back;
+	FrontCounterClockwise = false;
+};
+
+technique11 ColorTech
+{
+	pass P0
+	{
+		SetVertexShader(CompileShader(vs_5_0, VS()));
+		SetPixelShader(CompileShader(ps_5_0, PS()));
+		SetRasterizerState(WireFrameRS);
+	}
 }
