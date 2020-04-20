@@ -5,16 +5,16 @@ using SharpDX.D3DCompiler;
 using D3D11 = SharpDX.Direct3D11;
 using SharpDX.Direct3D11;
 using SharpDX;
+using System.Windows.Forms;
 
 namespace deleteSharpDX {
     class Program {
         static void Main(string[] args) {
-            using (var temp = new MySharpDXForm()) {
-            }
+            Application.Run(new DemoForm());
+
         }
     }
     class MySharpDXForm : IDisposable {
-        private RenderForm _renderForm;
         private D3D11.Device _d3DDevice;
         private D3D11.DeviceContext _d3DDeviceContext;
         private SwapChain _swapChain;
@@ -77,12 +77,10 @@ namespace deleteSharpDX {
         /// <summary>
         /// 初始化
         /// </summary>
-        public MySharpDXForm() {
+        public MySharpDXForm(RenderForm _renderForm) {
             GenerateFXY(5f, 5f, 10, 10);
             GenerateMesh(10, 10);
-            _renderForm = new RenderForm();
             _renderForm.KeyDown += _renderForm_KeyDown;
-            _renderForm.ClientSize = new System.Drawing.Size(_renderForm.ClientSize.Width, _renderForm.ClientSize.Height);
             _renderForm.Text = "愉快的学习SharpDX";
             _renderForm.Icon = null;
             _renderForm.ResizeBegin += (object sender, EventArgs e) => { _resized = true; };
@@ -174,7 +172,6 @@ namespace deleteSharpDX {
             _swapChain.Dispose();
             _d3DDevice.Dispose();
             _d3DDeviceContext.Dispose();
-            _renderForm.Dispose();
         }
         #region Some Unimmportant Methods
         private void _renderForm_MouseUp(object sender, System.Windows.Forms.MouseEventArgs e) {
@@ -234,7 +231,7 @@ namespace deleteSharpDX {
                     camPos.Y -= 0.1f;
                     break;
                 case System.Windows.Forms.Keys.Escape:
-                    _renderForm.Close();
+                    //_renderForm.Close();
                     break;
                 default:
                     break;
