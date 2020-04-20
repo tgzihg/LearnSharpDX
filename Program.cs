@@ -1,17 +1,10 @@
 ﻿using SharpDX.Windows;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using SharpDX.DXGI;
 using SharpDX.D3DCompiler;
 using D3D11 = SharpDX.Direct3D11;
 using SharpDX.Direct3D11;
 using SharpDX;
-using SharpDX.Mathematics.Interop;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
 
 namespace deleteSharpDX {
     class Program {
@@ -22,11 +15,6 @@ namespace deleteSharpDX {
     }
     class MySharpDXForm : IDisposable {
         private RenderForm _renderForm;
-        private int viewX = 0;
-        private int viewY = 0;
-        private int viewWidth = 800;
-        private int viewHeight = 600;
-        private Vector3 target;
         private Matrix proj;
         private Matrix view;
         private Matrix world;
@@ -41,13 +29,43 @@ namespace deleteSharpDX {
         private PixelShader _pixelShader;
         RasterizerStateDescription rasterizerStateDescWire;
         RasterizerStateDescription rasterizerStateDescSolid;
-
-        //摄像机相关参数
-
-        Vector3 camPos = new Vector3(0.0f, 2.0f, -5.0f);
-        Vector3 camTo = new Vector3(2f, 0f, 0f);
-        Vector3 camUp = new Vector3(0f, 1f, 0f);
-
+        Vector3 camPos  = new Vector3(0.0f, 2.0f, -5.0f);
+        Vector3 camTo   = new Vector3(2f, 0f, 0f);
+        Vector3 camUp   = new Vector3(0f, 1f, 0f);
+        struct MyFuncVertex {
+            public Vector3 Position;
+            public Vector3 Normal;
+            public Vector3 TangentU;
+            public Vector2 TexC;
+            public MyFuncVertex(Vector3 pos, Vector3 nor, Vector3 tan, Vector2 tex) {
+                Position = pos;
+                Normal = nor;
+                TangentU = tan;
+                TexC = tex;
+            }
+        }
+        struct MeshData {
+            public MyFuncVertex[] Vertices;
+            public int[] Indices;
+            public MeshData(int xNum, int zNum) {
+                Vertices = new MyFuncVertex[xNum * zNum];
+                Indices = new int[(xNum - 1) * (zNum - 1) * 6];
+            }
+        }
+        private D3D11.InputElement[] _inputElementsForMesh = new D3D11.InputElement[] {
+                new D3D11.InputElement("POSITION", 0, Format.R32G32B32A32_Float, 0),
+                new D3D11.InputElement("NORMAL", 0, Format.R32G32B32_Float, 0),
+                new D3D11.InputElement("TANGENTU", 0, Format.R32G32B32_Float, 0),
+                new D3D11.InputElement("TEXC", 0, Format.R32G32_Float, 0),
+            };
+        private Matrix worldViewProj;
+        private System.Drawing.Point preMouse;
+        private int dx;
+        private int dy;
+        private float targetX = 0f;
+        private float targetY = 0f;
+        private float targetZ = 5f;
+        private bool pitchFlag;
         MeshData meshData;
         /// <summary>
         /// 初始化
@@ -56,7 +74,6 @@ namespace deleteSharpDX {
             GenerateFXY(5f, 5f, 10, 10);
             GenerateMesh(10, 10);
             _renderForm = new RenderForm();
-            //窗体事件
             _renderForm.KeyDown += _renderForm_KeyDown;
             _renderForm.ClientSize = new System.Drawing.Size(_renderForm.ClientSize.Width, _renderForm.ClientSize.Height);
             _renderForm.Text = "愉快的学习SharpDX";
@@ -101,8 +118,8 @@ namespace deleteSharpDX {
             using (var pixelShaderByteCode = ShaderBytecode.CompileFromFile("../../MyShader.fx", "PS", "ps_4_0")) {
                 _pixelShader = new D3D11.PixelShader(_d3DDevice, pixelShaderByteCode);
             }
-            _inputLayout = new D3D11.InputLayout(_d3DDevice, _inputShaderSignature, _inputElementsForVertex2);
-            var FxyVertexBuffer = D3D11.Buffer.Create<deleteSharpDX.MyFuncVertex>(_d3DDevice, BindFlags.VertexBuffer, meshData.Vertices);
+            _inputLayout = new D3D11.InputLayout(_d3DDevice, _inputShaderSignature, _inputElementsForMesh);
+            var FxyVertexBuffer = D3D11.Buffer.Create<MyFuncVertex>(_d3DDevice, BindFlags.VertexBuffer, meshData.Vertices);
             var FxyConstBuffer = new D3D11.Buffer(_d3DDevice, Utilities.SizeOf<Matrix>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
             var indexBufferDesc = new BufferDescription(Utilities.SizeOf<int>() * meshData.Indices.Length, ResourceUsage.Default, BindFlags.IndexBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
             var FxyIndexBuffer = D3D11.Buffer.Create<int>(_d3DDevice, meshData.Indices, indexBufferDesc);
@@ -114,50 +131,25 @@ namespace deleteSharpDX {
             _d3DDeviceContext.VertexShader.SetConstantBuffer(0, FxyConstBuffer);
             _d3DDeviceContext.VertexShader.Set(_vertexShader);
             _d3DDeviceContext.PixelShader.Set(_pixelShader);
-
-            //投影透视矩阵在resize的时候需要更新
             proj = Matrix.Identity;
             view = Matrix.LookAtLH(camPos, camTo, camUp);
             world = Matrix.Identity;
-
-            //targetViewDir = new Vector3(targetX, targetY, targetZ);
-
             _resized = true;
+
             Texture2D backBuffer = null;
             RenderTargetView renderView = null;
             Texture2D depthBuffer = null;
             DepthStencilView depthView = null;
-            var clock = new Stopwatch();
-            clock.Start();
+
             RenderLoop.Run(_renderForm, () => {
                 targetViewDir = new Vector3(targetX, targetY, targetZ);
-                //接收鼠标消息，改变摄像机位置
-                //view = Matrix.LookAtLH(new Vector3(camera_x, camera_y, camera_z), new Vector3(1f, 1f, 0.1f), Vector3.UnitY);
-                //view = Matrix.LookAtLH(camPos, camTo, camUp);
-
-                //从view到world
-                //view = Matrix.LookAtLH(camPos, camTo, camUp);
                 view = Matrix.LookAtLH(camPos, camPos + targetViewDir, camUp);
-                //view = Matrix.LookAtLH(camPos, camPos + targetViewDir, camUp);
-
-                //view = new Matrix(
-                //1, 0, 0, 0,
-                //0, 1, 0, 0,
-                //0, 0, 1, 0,
-                //0, 1, clock.ElapsedTicks / 10000000f, 1);
-                //求逆：从world到view，world space中的坐标点乘以该矩阵，得到view space中的坐标显示在屏幕上
-                //view = Matrix.Invert(view);
-
-                //初始化或者改变窗口大小
                 if (_resized) {
-                    //清空之前的资源
                     Utilities.Dispose(ref backBuffer);
                     Utilities.Dispose(ref renderView);
                     Utilities.Dispose(ref depthBuffer);
                     Utilities.Dispose(ref depthView);
                     _swapChain.ResizeBuffers(swapChainDesc.BufferCount, _renderForm.ClientSize.Width, _renderForm.ClientSize.Height, Format.B8G8R8A8_UNorm, SwapChainFlags.None);
-                    //也可以这个样子从交换链中获得后台缓冲区：
-                    //backBuffer = _swapChain.GetBackBuffer<Texture2D>(0);
                     backBuffer = Texture2D.FromSwapChain<Texture2D>(_swapChain, 0);
                     renderView = new RenderTargetView(_d3DDevice, backBuffer);
                     depthBuffer = new Texture2D(_d3DDevice, new Texture2DDescription() {
@@ -175,79 +167,22 @@ namespace deleteSharpDX {
                     depthView = new DepthStencilView(_d3DDevice, depthBuffer);
                     _d3DDeviceContext.Rasterizer.SetViewport(new Viewport(0, 0, _renderForm.ClientSize.Width, _renderForm.ClientSize.Height, 0.0f, 1.0f));
                     _d3DDeviceContext.OutputMerger.SetTargets(depthView, renderView);
-                    // pi/4:视距角
                     proj = Matrix.PerspectiveFovLH((float)Math.PI / 4f, _renderForm.ClientSize.Width / (float)_renderForm.ClientSize.Height, 0.1f, 100f);
                     _resized = false;
                 }
                 _d3DDeviceContext.ClearDepthStencilView(depthView, DepthStencilClearFlags.Depth, 1.0f, 0);
                 _d3DDeviceContext.ClearRenderTargetView(renderView, SharpDX.Color.Black);
-                //_renderForm.Cursor.
-                //var viewPort = new Viewport(viewX, viewY, viewWidth, viewHeight);
                 var viewPort = new Viewport(0, 0, _renderForm.ClientSize.Width, _renderForm.ClientSize.Height);
                 _d3DDeviceContext.Rasterizer.SetViewport(viewPort);
                 var viewProj = Matrix.Multiply(view, proj);
-                //var world = Matrix.RotationY(time);
                 worldViewProj = world * viewProj;
                 worldViewProj.Transpose();
 
                 _d3DDeviceContext.UpdateSubresource(ref worldViewProj, FxyConstBuffer);
                 _d3DDeviceContext.DrawIndexed(meshData.Indices.Length, 0, 0);
-                //_d3DDeviceContext.Draw(meshData.Vertices.Length, 0);
                 _swapChain.Present(0, PresentFlags.None);
             });
         }
-        private void _renderForm_MouseUp(object sender, System.Windows.Forms.MouseEventArgs e) {
-            pitchFlag = false;
-            preMouse = e.Location;
-        }
-
-        void Picth(float rad) {
-            view = Matrix.LookAtLH(camPos, camTo, camUp);
-            //camUp = Vector3.TransformNormal(camUp, R);
-            //camTo = Vector3.TransformNormal(camTo, R);
-        }
-
-        private void _renderForm_MouseDown(object sender, System.Windows.Forms.MouseEventArgs e) {
-            pitchFlag = true;
-            preMouse = e.Location;
-        }
-
-        private void _renderForm_MouseMove(object sender, System.Windows.Forms.MouseEventArgs e) {
-            if (pitchFlag) {
-                dx = e.Location.X - preMouse.X;
-                dy = e.Location.Y - preMouse.Y;
-                targetX -= dx / 10000f;
-                targetY += dy / 10000f;
-            }
-            
-            //camTo = new Vector3((float)e.X / 200f, (float)e.Y / 150f, 0f);
-            //SetCursorPos(300, 300);
-
-            //dx = e.Location.X - preMouse.X;
-            //dy = e.Location.Y - preMouse.Y;
-            //tx += 0.1f * dx;
-            //ty -= 0.1f * dy;
-            //camTo = new Vector3(tx, +ty, 1f);
-            //preMouse = e.Location;
-
-            //view = Matrix.LookAtLH(new Vector3(camera_x, camera_y, camera_z), target, Vector3.UnitY);
-
-            //SetCursorPos(100, 100);
-            //worldViewProj
-
-            //Vector2 mouse = new Vector2(
-            //    ((float)e.X - (float)_renderForm.Width / 2) / ((float)_renderForm.Width / 2),
-            //    ((float)e.Y - (float)_renderForm.Height / 2) / ((float)_renderForm.Height / 2));
-            //Vector3 orig = new Vector3(mouse.X, mouse.Y, 0.0f);
-            //Vector3 far = new Vector3(mouse.X, mouse.Y, 1.0f);
-            //var mvpInvers = Matrix.Invert(worldViewProj);
-            //Vector3 origin = Vector3.TransformCoordinate(orig, mvpInvers);
-            //Vector3 posfar = Vector3.TransformCoordinate(far, mvpInvers);
-
-            //Console.WriteLine($"Far: {posfar.X} {posfar.Y} {posfar.Z}");
-            //view = Matrix.LookAtLH(new Vector3(camera_x, camera_y, camera_z), new Vector3(0, 0, 0), Vector3.UnitY);
-        }
-
         public void Dispose() {
             _swapChain.Dispose();
             _d3DDevice.Dispose();
@@ -255,9 +190,21 @@ namespace deleteSharpDX {
             _renderForm.Dispose();
         }
         #region Some Unimmportant Methods
-        static Vector4 SysColorTofloat4(System.Drawing.Color color) {
-            const float n = 255f;
-            return new Vector4(color.R / n, color.G / n, color.B / n, color.A / n);
+        private void _renderForm_MouseUp(object sender, System.Windows.Forms.MouseEventArgs e) {
+            pitchFlag = false;
+            preMouse = e.Location;
+        }
+        private void _renderForm_MouseDown(object sender, System.Windows.Forms.MouseEventArgs e) {
+            pitchFlag = true;
+            preMouse = e.Location;
+        }
+        private void _renderForm_MouseMove(object sender, System.Windows.Forms.MouseEventArgs e) {
+            if (pitchFlag) {
+                dx = e.Location.X - preMouse.X;
+                dy = e.Location.Y - preMouse.Y;
+                targetX -= dx / 10000f;
+                targetY += dy / 10000f;
+            }
         }
         private void _renderForm_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e) {
             switch (e.KeyCode) {
@@ -314,49 +261,8 @@ namespace deleteSharpDX {
             }
         }
         #endregion
-        #region 立方体：自定义顶点:结构，数据，索引，输入布局
-        public struct MyVertex {
-            Vector3 VertexPos;
-            Vector4 VertexColor;
-            public MyVertex(Vector3 ver, Vector4 col) {
-                this.VertexPos = ver;
-                this.VertexColor = col;
-            }
-        }
-        public MyVertex[] _myVertex = new[] {
-            new MyVertex(new Vector3(-0.5f,0.5f,1), SysColorTofloat4(System.Drawing.Color.Red)),
-            new MyVertex(new Vector3(0.5f,0.5f,1), SysColorTofloat4(System.Drawing.Color.Green)),
-            new MyVertex(new Vector3(0.5f,-0.5f,1), SysColorTofloat4(System.Drawing.Color.Blue)),
-            new MyVertex(new Vector3(-0.5f,-0.5f,1), SysColorTofloat4(System.Drawing.Color.Red)),
-            new MyVertex(new Vector3(-0.3f,0.3f,0.5f), SysColorTofloat4(System.Drawing.Color.Green)),
-            new MyVertex(new Vector3(0.3f,0.3f,0.5f), SysColorTofloat4(System.Drawing.Color.Blue)),
-            new MyVertex(new Vector3(0.3f,-0.3f,0.5f), SysColorTofloat4(System.Drawing.Color.Red)),
-            new MyVertex(new Vector3(-0.3f,-0.3f,0.5f), SysColorTofloat4(System.Drawing.Color.Green)),
-            };
-        int[] _indices = new int[]{
-                0,1,2,3,4,5,6,7
-            };
-        private D3D11.InputElement[] _inputElementsForVertex2 = new D3D11.InputElement[] {
-                new D3D11.InputElement("POSITION", 0, Format.R32G32B32A32_Float, 0),
-                new D3D11.InputElement("NORMAL", 0, Format.R32G32B32_Float, 0),
-                new D3D11.InputElement("TANGENTU", 0, Format.R32G32B32_Float, 0),
-                new D3D11.InputElement("TEXC", 0, Format.R32G32_Float, 0),
-            };
-        private Matrix worldViewProj;
-        private System.Drawing.Point preMouse;
-        private int dx;
-        private int dy;
-        private float tx;
-        private float ty;
-        private float targetX = 0f;
-        private float targetY = 0f;
-        private float targetZ = 5f;
-        private bool pitchFlag;
-        #endregion
         #region 三维函数图
         int[] fxyIndices = new int[] {};
-        private int xNUM;
-        private int zNUM;
 
         void GenerateMesh(int xNum, int zNum) {
             int k = 0;
@@ -394,28 +300,5 @@ namespace deleteSharpDX {
             }
         }
         #endregion
-
-        [DllImport("user32.dll")]
-        private static extern int SetCursorPos(int x, int y);
-    }
-    struct MyFuncVertex {
-        public Vector3 Position;
-        public Vector3 Normal;
-        public Vector3 TangentU;
-        public Vector2 TexC;
-        public MyFuncVertex(Vector3 pos, Vector3 nor, Vector3 tan, Vector2 tex) {
-            Position = pos;
-            Normal = nor;
-            TangentU = tan;
-            TexC = tex;
-        }
-    }
-    struct MeshData {
-        public MyFuncVertex[] Vertices;
-        public int[] Indices;
-        public MeshData(int xNum, int zNum) {
-            Vertices = new MyFuncVertex[xNum * zNum];
-            Indices = new int[(xNum-1) * (zNum-1) * 6];
-        }
     }
 }
