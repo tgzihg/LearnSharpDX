@@ -392,18 +392,162 @@ struct MeshData {
 其成员有`MyVertex`顶点数组和`int[]`索引数组。`MyVertex`顶点结构如下：
 ```csharp
 struct MyFuncVertex {
-    public Vector3 Position;	// 位置
-    public Vector4 Color;		// 颜色
-    public Vector3 Normal;	// 法向
-    public Vector3 TangentU;	// 切向
-    public Vector2 TexC;		// 纹理
+	public Vector3 Position;	// 位置
+	public Vector4 Color;		// 颜色
+	public Vector3 Normal;	// 法向
+	public Vector3 TangentU;	// 切向
+	public Vector2 TexC;		// 纹理
 
-    public MyFuncVertex(Vector3 pos, Vector4 color, Vector3 nor, Vector3 tan, Vector2 tex) {
-        Position = pos;
-        Normal = nor;
-        TangentU = tan;
-        TexC = tex;
-        Color = color;
-    }
+	public MyFuncVertex(Vector3 pos, Vector4 color, Vector3 nor, Vector3 tan, Vector2 tex) {
+		Position = pos;
+		Normal = nor;
+		TangentU = tan;
+		TexC = tex;
+		Color = color;
+	}
 }
 ```
+
+创建柱体网格顶点： 
+```csharp
+void GenerateCylinder(float topRadius, float bottomRadius, float height, int sliceCount, int stackCount, out MeshData outMesh) {
+	// init meshdata size
+	var vertexsNum = (stackCount + 1) * (sliceCount + 1);
+	var indexNum = stackCount * sliceCount * 6;
+	outMesh = new MeshData(vertexsNum, indexNum);
+	// Stacks
+	float stackHeight = height / stackCount;
+	// radius increment
+	float radiusStep = (topRadius - bottomRadius) / stackCount;
+	// ring count
+	var ringCount = stackCount + 1;
+	int number = 0;
+	// 层层建模
+	for (int i = 0; i < ringCount; i++) {
+		// 建模中心 y 在中心高度处，从低往高建
+		float y = -0.5f * height + i * stackHeight;
+		float r = bottomRadius + i * radiusStep;
+		// vertices
+		float dTheta = 2.0f * (float)Math.PI / sliceCount;
+		// 起始顶点和最终顶点只是位置一样，但其它向量不同
+
+		for (int j = 0; j <= sliceCount; j++) {
+			float c = (float)Math.Cos(j * dTheta);
+			float s = (float)Math.Sin(j * dTheta);
+			MyVertex myVertex = new MyVertex();
+			myVertex.Position = new Vector3(r * c, y, r * s);
+			myVertex.TexC.X = (float)j / sliceCount;
+			myVertex.TexC.Y = 1.0f - (float)i / stackCount;
+			myVertex.TangentU = new Vector3(-s, 0f, c);
+			myVertex.Color = new Vector4(1, 1, 1, 1);
+			float dr = bottomRadius - topRadius;
+			Vector3 bitangent = new Vector3(dr * c, -height, dr * s);
+			myVertex.Normal = Vector3.Normalize(Vector3.Cross(myVertex.TangentU, bitangent));
+			outMesh.Vertices[number] = myVertex;
+			number++;
+		}
+	}
+}
+```
+创建网格顶点索引：
+```csharp
+void GenerateCyMesh(int sliceCount, int stackCount, ref MeshData refMesh) {
+	int number = 0;
+	int numsPerRing = sliceCount + 1;
+	for (int i = 0; i < stackCount; i++) {
+		for (int j = 0; j < sliceCount; j++) {
+			refMesh.Indices[number + 0] = i * numsPerRing + j;
+			refMesh.Indices[number + 1] = (i + 1) * numsPerRing + j;
+			refMesh.Indices[number + 2] = (i + 1) * numsPerRing + j + 1;
+			refMesh.Indices[number + 3] = (i + 1) * numsPerRing + j + 1;
+			refMesh.Indices[number + 4] = i * numsPerRing + j + 1;
+			refMesh.Indices[number + 5] = i * numsPerRing + j;
+			number += 6;
+		}
+	}
+}
+```
+创建顶底面顶点及索引：
+```csharp
+void GenerateTopFace(float topRadius, float bottomRadius, float height, int sliceCount, ref MeshData outMesh) {
+	// 顶面顶点数据
+	float dTheta = 2.0f * (float)Math.PI / sliceCount;
+	List<MyVertex> tempVertex = outMesh.Vertices.ToList();
+	for (int i = 0; i <= sliceCount; i++) {
+		float x = (float)(topRadius * Math.Cos(i * dTheta));
+		float z = (float)(topRadius * Math.Sin(i * dTheta));
+		MyVertex myVertex = new MyVertex();
+		myVertex.Position = new Vector3(x, 0.5f * height, z);
+		myVertex.TexC.X = x / height + 0.5f;
+		myVertex.TexC.Y = z / height + 0.5f;
+		myVertex.TangentU = new Vector3(1, 0, 0);
+		myVertex.Color = new Vector4(1, 1, 0, 1);
+		myVertex.Normal = new Vector3(0, 1, 0);
+
+		tempVertex.Add(myVertex);
+	}
+	// 顶点中心数据
+	var myVertexCenter = new MyVertex();
+	myVertexCenter.Position = new Vector3(0, 0.5f * height, 0);
+	myVertexCenter.TexC.X = 0.5f;
+	myVertexCenter.TexC.Y = 0.5f;
+	myVertexCenter.TangentU = new Vector3(1, 0, 0);
+	myVertexCenter.Color = new Vector4(1, 1, 0, 1);
+	myVertexCenter.Normal = new Vector3(0, 1, 0);
+			
+	tempVertex.Add(myVertexCenter);
+	outMesh.Vertices = tempVertex.ToArray();
+			
+	// 顶面索引
+	List<int> tempIndices = outMesh.Indices.ToList();
+	for (int i = 0; i <= sliceCount; i++) {
+		tempIndices.Add(outMesh.Vertices.Length - 1);
+		tempIndices.Add(outMesh.Vertices.Length - 2 - i);
+		tempIndices.Add(outMesh.Vertices.Length - 1 - i);
+	}
+	outMesh.Indices = tempIndices.ToArray();
+}
+
+private void GenerateBotFace(float topRadius, float bottomRadius, float height, int sliceCount, ref MeshData outMesh) {
+	// 底面顶点数据
+	float dTheta = 2.0f * (float)Math.PI / sliceCount;
+	List<MyVertex> tempVertex = outMesh.Vertices.ToList();
+	for (int i = 0; i <= sliceCount; i++) {
+		float x = (float)(topRadius * Math.Cos(i * dTheta));
+		float z = (float)(topRadius * Math.Sin(i * dTheta));
+		MyVertex myVertex = new MyVertex();
+		myVertex.Position = new Vector3(x, -0.5f * height, z);
+		myVertex.TexC.X = x / height + 0.5f;
+		myVertex.TexC.Y = z / height + 0.5f;
+		myVertex.TangentU = new Vector3(1, 0, 0);
+		myVertex.Color = new Vector4(1, 0, 1, 1);
+		myVertex.Normal = new Vector3(0, -1, 0);
+
+		tempVertex.Add(myVertex);
+	}
+	// 顶点中心数据
+	var myVertexCenter = new MyVertex();
+	myVertexCenter.Position = new Vector3(0, -0.5f * height, 0);
+	myVertexCenter.TexC.X = 0.5f;
+	myVertexCenter.TexC.Y = 0.5f;
+	myVertexCenter.TangentU = new Vector3(1, 0, 0);
+	myVertexCenter.Color = new Vector4(1, 0, 1, 1);
+	myVertexCenter.Normal = new Vector3(0, -1, 0);
+
+	tempVertex.Add(myVertexCenter);
+	outMesh.Vertices = tempVertex.ToArray();
+
+	// 顶面索引
+	List<int> tempIndices = outMesh.Indices.ToList();
+	for (int i = 0; i <= sliceCount; i++) {
+		tempIndices.Add(outMesh.Vertices.Length - 1);
+		tempIndices.Add(outMesh.Vertices.Length - 2 - i);
+		tempIndices.Add(outMesh.Vertices.Length - 1 - i);
+	}
+	outMesh.Indices = tempIndices.ToArray();
+}
+```
+
+其中Array<-->List<>的转换需要引用Linq。
+
+![柱体几何体网格](imgJHTWG.png "柱体网格")

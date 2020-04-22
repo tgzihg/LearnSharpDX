@@ -6,6 +6,8 @@ using D3D11 = SharpDX.Direct3D11;
 using SharpDX.Direct3D11;
 using SharpDX;
 using System.Windows.Forms;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace deleteSharpDX {
     class Program {
@@ -25,13 +27,13 @@ namespace deleteSharpDX {
         /// <summary>
         /// 自定义顶点结构
         /// </summary>
-        struct MyFuncVertex {
+        struct MyVertex {
             public Vector3 Position;
             public Vector4 Color;
             public Vector3 Normal;
             public Vector3 TangentU;
             public Vector2 TexC;
-            public MyFuncVertex(Vector3 pos, Vector4 color, Vector3 nor, Vector3 tan, Vector2 tex) {
+            public MyVertex(Vector3 pos, Vector4 color, Vector3 nor, Vector3 tan, Vector2 tex) {
                 Position = pos;
                 Normal = nor;
                 TangentU = tan;
@@ -43,14 +45,21 @@ namespace deleteSharpDX {
         /// 定义网格
         /// </summary>
         struct MeshData {
-            public MyFuncVertex[] Vertices;
+            public MyVertex[] Vertices;
             public int[] Indices;
-            public MeshData(int xNum, int zNum) {
-                Vertices = new MyFuncVertex[xNum * zNum];
+            public MeshData(int count) {
+                Vertices = new MyVertex[count];
+                Indices = new int[count];
+            }
+            public MeshData(int vertexCount, int indexCount) {
+                Vertices = new MyVertex[vertexCount];
+                Indices = new int[indexCount];
+            }
+            public void Resize2DQuad(int xNum, int zNum) {
+                Vertices = new MyVertex[xNum * zNum];
                 Indices = new int[(xNum - 1) * (zNum - 1) * 6];
             }
         }
-        MeshData meshData;
         private D3D11.InputElement[] _inputElementsForMesh = new D3D11.InputElement[] {
                 new D3D11.InputElement("POSITION", 0, Format.R32G32B32_Float, 0),
                 new D3D11.InputElement("COLOR", 0, Format.R32G32B32A32_Float, 0),
@@ -85,8 +94,16 @@ namespace deleteSharpDX {
         /// 初始化
         /// </summary>
         public MySharpDXForm() {
-            GenerateFXY(5f, 5f, 10, 10);
-            GenerateMesh(10, 10);
+            MeshData cylinderMesh;
+            int sliceNum = 100;
+            int stackNum = 10;
+            int topRad = 10;
+            int botRad = 10;
+            int height = 20;
+            GenerateCylinder(topRad, botRad, height, sliceNum, stackNum, out cylinderMesh);
+            GenerateCyMeshIndex(sliceNum, stackNum, ref cylinderMesh);
+            GenerateTopFace(topRad, botRad, height, sliceNum, ref cylinderMesh);
+            GenerateBotFace(topRad, botRad, height, sliceNum, ref cylinderMesh);
             _renderForm = new RenderForm();
             _renderForm.ClientSize = new System.Drawing.Size(800, 600);
             _renderForm.KeyDown += _renderForm_KeyDown;
@@ -123,13 +140,12 @@ namespace deleteSharpDX {
                 mfxWorldViewProj = effect.GetVariableByName("worldViewProj").AsMatrix();
             }
             _inputLayout = new D3D11.InputLayout(_d3DDevice, _inputShaderSignature, _inputElementsForMesh);
-            var FxyVertexBuffer = D3D11.Buffer.Create<MyFuncVertex>(_d3DDevice, BindFlags.VertexBuffer, meshData.Vertices);
-            var indexBufferDesc = new BufferDescription(Utilities.SizeOf<int>() * meshData.Indices.Length, ResourceUsage.Default, BindFlags.IndexBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
-            var FxyIndexBuffer = D3D11.Buffer.Create<int>(_d3DDevice, meshData.Indices, indexBufferDesc);
+            var CylVertexBuffer = D3D11.Buffer.Create<MyVertex>(_d3DDevice, BindFlags.VertexBuffer, cylinderMesh.Vertices);
+            var CylIndexBuffer = D3D11.Buffer.Create<int>(_d3DDevice, BindFlags.IndexBuffer, cylinderMesh.Indices);
             _d3DDeviceContext.InputAssembler.InputLayout = _inputLayout;
             _d3DDeviceContext.InputAssembler.PrimitiveTopology = SharpDX.Direct3D.PrimitiveTopology.TriangleList;
-            _d3DDeviceContext.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(FxyVertexBuffer, Utilities.SizeOf<MyFuncVertex>(), 0));
-            _d3DDeviceContext.InputAssembler.SetIndexBuffer(FxyIndexBuffer, Format.R32_UInt, 0);
+            _d3DDeviceContext.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(CylVertexBuffer, Utilities.SizeOf<MyVertex>(), 0));
+            _d3DDeviceContext.InputAssembler.SetIndexBuffer(CylIndexBuffer, Format.R32_UInt, 0);
             proj = Matrix.Identity;
             view = Matrix.LookAtLH(camPos, camTo, camUp);
             world = Matrix.Identity;
@@ -179,10 +195,8 @@ namespace deleteSharpDX {
                 var viewProj = Matrix.Multiply(view, proj);
                 worldViewProj = world * viewProj;
                 mfxWorldViewProj.SetMatrix(worldViewProj);
-                mfxPassS.Apply(_d3DDeviceContext);
-                _d3DDeviceContext.DrawIndexed(meshData.Indices.Length/2, 0, 0);
-                mfxPassW.Apply(_d3DDeviceContext);
-                _d3DDeviceContext.DrawIndexed(meshData.Indices.Length/2, meshData.Indices.Length / 2, 0);
+                mfxPass.Apply(_d3DDeviceContext);
+                _d3DDeviceContext.DrawIndexed(cylinderMesh.Indices.Length, 0, 0);
                 _swapChain.Present(0, PresentFlags.None);
                 fpsCounter++;
                 if (clock.ElapsedMilliseconds - lastTime >= 1000) {
@@ -192,11 +206,146 @@ namespace deleteSharpDX {
                 }
             });
         }
+
+        
+
         public void Dispose() {
             _swapChain.Dispose();
             _d3DDevice.Dispose();
             _d3DDeviceContext.Dispose();
         }
+
+        #region 几何网格
+        void GenerateCylinder(float topRadius, float bottomRadius, float height, int sliceCount, int stackCount, out MeshData outMesh) {
+            // init meshdata size
+            var vertexsNum = (stackCount + 1) * (sliceCount + 1);
+            var indexNum = stackCount * sliceCount * 6;
+            outMesh = new MeshData(vertexsNum, indexNum);
+            // Stacks
+            float stackHeight = height / stackCount;
+            // radius increment
+            float radiusStep = (topRadius - bottomRadius) / stackCount;
+            // ring count
+            var ringCount = stackCount + 1;
+            int vetexNumber = 0;
+            float dTheta = 2.0f * (float)Math.PI / sliceCount;
+            // 层层建模 侧面顶点数据
+            for (int i = 0; i < ringCount; i++) {
+                // 建模中心 y 在中心高度处，从低往高建
+                float y = -0.5f * height + i * stackHeight;
+                float r = bottomRadius + i * radiusStep;
+                // vertices
+                // 起始顶点和最终顶点只是位置一样，但顶点其它分量不同
+                for (int j = 0; j <= sliceCount; j++) {
+                    float c = (float)Math.Cos(j * dTheta);
+                    float s = (float)Math.Sin(j * dTheta);
+                    MyVertex myVertex = new MyVertex();
+                    myVertex.Position = new Vector3(r * c, y, r * s);
+                    myVertex.TexC.X = (float)j / sliceCount;
+                    myVertex.TexC.Y = 1.0f - (float)i / stackCount;
+                    myVertex.TangentU = new Vector3(-s, 0f, c);
+                    myVertex.Color = new Vector4(1, 1, 1, 1);
+                    float dr = bottomRadius - topRadius;
+                    Vector3 bitangent = new Vector3(dr * c, -height, dr * s);
+                    myVertex.Normal = Vector3.Normalize(Vector3.Cross(myVertex.TangentU, bitangent));
+                    outMesh.Vertices[vetexNumber] = myVertex;
+                    vetexNumber++;
+                }
+            }
+        }
+        void GenerateCyMeshIndex(int sliceCount, int stackCount, ref MeshData refMesh) {
+            int number = 0;
+            int numsPerRing = sliceCount + 1;
+            for (int i = 0; i < stackCount; i++) {
+                for (int j = 0; j < sliceCount; j++) {
+                    refMesh.Indices[number + 0] = i * numsPerRing + j;
+                    refMesh.Indices[number + 1] = (i + 1) * numsPerRing + j;
+                    refMesh.Indices[number + 2] = (i + 1) * numsPerRing + j + 1;
+                    refMesh.Indices[number + 3] = (i + 1) * numsPerRing + j + 1;
+                    refMesh.Indices[number + 4] = i * numsPerRing + j + 1;
+                    refMesh.Indices[number + 5] = i * numsPerRing + j;
+                    number += 6;
+                }
+            }
+        }
+        void GenerateTopFace(float topRadius, float bottomRadius, float height, int sliceCount, ref MeshData outMesh) {
+            // 顶面顶点数据
+            float dTheta = 2.0f * (float)Math.PI / sliceCount;
+            List<MyVertex> tempVertex = outMesh.Vertices.ToList();
+            for (int i = 0; i <= sliceCount; i++) {
+                float x = (float)(topRadius * Math.Cos(i * dTheta));
+                float z = (float)(topRadius * Math.Sin(i * dTheta));
+                MyVertex myVertex = new MyVertex();
+                myVertex.Position = new Vector3(x, 0.5f * height, z);
+                myVertex.TexC.X = x / height + 0.5f;
+                myVertex.TexC.Y = z / height + 0.5f;
+                myVertex.TangentU = new Vector3(1, 0, 0);
+                myVertex.Color = new Vector4(1, 1, 0, 1);
+                myVertex.Normal = new Vector3(0, 1, 0);
+
+                tempVertex.Add(myVertex);
+            }
+            // 顶点中心数据
+            var myVertexCenter = new MyVertex();
+            myVertexCenter.Position = new Vector3(0, 0.5f * height, 0);
+            myVertexCenter.TexC.X = 0.5f;
+            myVertexCenter.TexC.Y = 0.5f;
+            myVertexCenter.TangentU = new Vector3(1, 0, 0);
+            myVertexCenter.Color = new Vector4(1, 1, 0, 1);
+            myVertexCenter.Normal = new Vector3(0, 1, 0);
+
+            tempVertex.Add(myVertexCenter);
+            outMesh.Vertices = tempVertex.ToArray();
+
+            // 顶面索引
+            List<int> tempIndices = outMesh.Indices.ToList();
+            for (int i = 0; i <= sliceCount; i++) {
+                tempIndices.Add(outMesh.Vertices.Length - 1);
+                tempIndices.Add(outMesh.Vertices.Length - 2 - i);
+                tempIndices.Add(outMesh.Vertices.Length - 1 - i);
+            }
+            outMesh.Indices = tempIndices.ToArray();
+        }
+
+        private void GenerateBotFace(float topRadius, float bottomRadius, float height, int sliceCount, ref MeshData outMesh) {
+            // 底面顶点数据
+            float dTheta = 2.0f * (float)Math.PI / sliceCount;
+            List<MyVertex> tempVertex = outMesh.Vertices.ToList();
+            for (int i = 0; i <= sliceCount; i++) {
+                float x = (float)(topRadius * Math.Cos(i * dTheta));
+                float z = (float)(topRadius * Math.Sin(i * dTheta));
+                MyVertex myVertex = new MyVertex();
+                myVertex.Position = new Vector3(x, -0.5f * height, z);
+                myVertex.TexC.X = x / height + 0.5f;
+                myVertex.TexC.Y = z / height + 0.5f;
+                myVertex.TangentU = new Vector3(1, 0, 0);
+                myVertex.Color = new Vector4(1, 0, 1, 1);
+                myVertex.Normal = new Vector3(0, -1, 0);
+
+                tempVertex.Add(myVertex);
+            }
+            // 顶点中心数据
+            var myVertexCenter = new MyVertex();
+            myVertexCenter.Position = new Vector3(0, -0.5f * height, 0);
+            myVertexCenter.TexC.X = 0.5f;
+            myVertexCenter.TexC.Y = 0.5f;
+            myVertexCenter.TangentU = new Vector3(1, 0, 0);
+            myVertexCenter.Color = new Vector4(1, 0, 1, 1);
+            myVertexCenter.Normal = new Vector3(0, -1, 0);
+
+            tempVertex.Add(myVertexCenter);
+            outMesh.Vertices = tempVertex.ToArray();
+
+            // 顶面索引
+            List<int> tempIndices = outMesh.Indices.ToList();
+            for (int i = 0; i <= sliceCount; i++) {
+                tempIndices.Add(outMesh.Vertices.Length - 1);
+                tempIndices.Add(outMesh.Vertices.Length - 2 - i);
+                tempIndices.Add(outMesh.Vertices.Length - 1 - i);
+            }
+            outMesh.Indices = tempIndices.ToArray();
+        }
+        #endregion
         #region Some Unimmportant Methods
         private void _renderForm_MouseUp(object sender, System.Windows.Forms.MouseEventArgs e) {
             rotateFlag = false;
@@ -237,22 +386,22 @@ namespace deleteSharpDX {
                     break;
                 //移动摄像机：
                 case System.Windows.Forms.Keys.W:
-                    camPos.Z += 0.1f;
+                    camPos.Z += 1f;
                     break;
                 case System.Windows.Forms.Keys.S:
-                    camPos.Z -= 0.1f;
+                    camPos.Z -= 1f;
                     break;
                 case System.Windows.Forms.Keys.A:
-                    camPos.X -= 0.1f;
+                    camPos.X -= 1f;
                     break;
                 case System.Windows.Forms.Keys.D:
-                    camPos.X += 0.1f;
+                    camPos.X += 1f;
                     break;
                 case System.Windows.Forms.Keys.Q:
-                    camPos.Y += 0.1f;
+                    camPos.Y += 1f;
                     break;
                 case System.Windows.Forms.Keys.E:
-                    camPos.Y -= 0.1f;
+                    camPos.Y -= 1f;
                     break;
                 case System.Windows.Forms.Keys.Escape:
                     _renderForm.Close();
@@ -268,59 +417,6 @@ namespace deleteSharpDX {
             }
         }
         #endregion
-        #region 三维函数顶点
-        void GenerateMesh(int xNum, int zNum) {
-            int k = 0;
-            for (int quadX = 0; quadX < xNum-1; quadX++) {
-                for (int quadZ = 0; quadZ < zNum-1; quadZ++) {
-                    meshData.Indices[k + 0] = quadX * zNum + quadZ;
-                    meshData.Indices[k + 1] = quadX * zNum + quadZ + 1;
-                    meshData.Indices[k + 2] = (quadX + 1) * zNum + quadZ + 1;
-
-                    meshData.Indices[k + 3] = (quadX + 1) * zNum + quadZ + 1;
-                    meshData.Indices[k + 4] = (quadX + 1) * zNum + quadZ;
-                    meshData.Indices[k + 5] = quadX * zNum + quadZ;
-                    k += 6;
-                }
-            }
-        }
-        void GenerateFXY(float xlength, float zlength, int xNum, int zNum) {
-            int index;
-            meshData = new MeshData(xNum, zNum);
-            var dx = xlength / xNum;
-            var dz = zlength / zNum;
-            // for texturing 纹理坐标
-            var du = 1f / xNum;
-            var dv = 1f / zNum;
-            for (int xIndex = 0; xIndex < xNum; xIndex++) {
-                for (int zIndex = 0; zIndex < zNum; zIndex++) {
-                    index = xIndex * zNum + zIndex;
-                    // 位置坐标
-                    meshData.Vertices[index].Position = new Vector3(xIndex * dx, getNum(xIndex * dx, zIndex * dz), zIndex * dz);
-                    if (meshData.Vertices[index].Position.Y < 5) {
-                        meshData.Vertices[index].Color = new Vector4(1, 1, 1, 1);
-                    } else if (meshData.Vertices[index].Position.Y < 8) {
-                        meshData.Vertices[index].Color = new Vector4(1, 0, 1, 1);
-                    } else if (meshData.Vertices[index].Position.Y < 11) {
-                        meshData.Vertices[index].Color = new Vector4(1, 1, 0, 1);
-                    } else if (meshData.Vertices[index].Position.Y < 14) {
-                        meshData.Vertices[index].Color = new Vector4(0.5f, 1, 1, 1);
-                    } else {
-                        meshData.Vertices[index].Color = new Vector4(1, 0.5f, 1, 1);
-                    }
-                    // 光照
-                    meshData.Vertices[index].Normal     = new Vector3(0f, 1f, 0f);
-                    meshData.Vertices[index].TangentU   = new Vector3(1f, 0f, 0f);
-                    // 纹理坐标
-                    meshData.Vertices[index].TexC.X     = xIndex * du;
-                    meshData.Vertices[index].TexC.Y     = zIndex * dv;
-                }
-            }
-        }
-
-        float getNum(float x, float z) {
-            return (float)Math.Sqrt(x * x + z * z);
-        }
-        #endregion
+       
     }
 }

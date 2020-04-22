@@ -30,17 +30,6 @@ float4 PS(PS_IN input) : SV_Target
 	return input.col;
 }
 
-float4 PS_Tex(PS_IN pin, uniform bool gApplyTexture) : SV_Target
-{
-	//Do Common Work
-	if (gApplyTexture)
-	{
-		//Apply texture
-	}
-	//Do more work
-	return float4(0, 0, 0, 0);
-}
-
 RasterizerState WireFrameRS
 {
 	FillMode = Wireframe;
