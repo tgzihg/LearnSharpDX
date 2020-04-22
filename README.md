@@ -367,3 +367,43 @@ technique11 TextureTech
 	}
 }
 ```
+
+## 6.11 创建基本集合体网格
+### 6.11.1 圆柱体网格
+决定参数：
+- 顶面半径
+- 底面半径
+- 柱体高度
+- 切面数量（高度分割）
+- 切片数量（圆分割）
+
+我们采用一种meshdata的数据结构：
+```csharp
+struct MeshData {
+	public MyVertex[] Vertices;
+	public int[] Indices;
+
+	public MeshData(int xNum, int zNum) {
+		Vertices = new MyFuncVertex[xNum * zNum];
+		Indices = new int[(xNum - 1) * (zNum - 1) * 6];
+	}
+}
+```
+其成员有`MyVertex`顶点数组和`int[]`索引数组。`MyVertex`顶点结构如下：
+```csharp
+struct MyFuncVertex {
+    public Vector3 Position;	// 位置
+    public Vector4 Color;		// 颜色
+    public Vector3 Normal;	// 法向
+    public Vector3 TangentU;	// 切向
+    public Vector2 TexC;		// 纹理
+
+    public MyFuncVertex(Vector3 pos, Vector4 color, Vector3 nor, Vector3 tan, Vector2 tex) {
+        Position = pos;
+        Normal = nor;
+        TangentU = tan;
+        TexC = tex;
+        Color = color;
+    }
+}
+```

@@ -138,6 +138,11 @@ namespace deleteSharpDX {
             RenderTargetView renderView = null;
             Texture2D depthBuffer = null;
             DepthStencilView depthView = null;
+            long lastTime = 0;
+            // 帧数钟
+            var clock = new System.Diagnostics.Stopwatch();
+            clock.Start();
+            int fpsCounter = 0;
             RenderLoop.Run(_renderForm, () => {
                 targetViewDir = new Vector3(targetX, targetY, targetZ);
                 view = Matrix.LookAtLH(camPos, camPos + targetViewDir, camUp);
@@ -169,7 +174,7 @@ namespace deleteSharpDX {
                 }
                 _d3DDeviceContext.ClearDepthStencilView(depthView, DepthStencilClearFlags.Depth, 1.0f, 0);
                 _d3DDeviceContext.ClearRenderTargetView(renderView, SharpDX.Color.Black);
-                var viewPort = new Viewport(0, 0, _renderForm.ClientSize.Width, _renderForm.ClientSize.Height);
+                var viewPort = new Viewport(0, 0, _renderForm.ClientSize.Width, _renderForm.ClientSize.Height,0,100f);
                 _d3DDeviceContext.Rasterizer.SetViewport(viewPort);
                 var viewProj = Matrix.Multiply(view, proj);
                 worldViewProj = world * viewProj;
@@ -179,6 +184,12 @@ namespace deleteSharpDX {
                 mfxPassW.Apply(_d3DDeviceContext);
                 _d3DDeviceContext.DrawIndexed(meshData.Indices.Length/2, meshData.Indices.Length / 2, 0);
                 _swapChain.Present(0, PresentFlags.None);
+                fpsCounter++;
+                if (clock.ElapsedMilliseconds - lastTime >= 1000) {
+                    _renderForm.Text = "FPS:" + fpsCounter.ToString();
+                    fpsCounter = 0;
+                    lastTime = clock.ElapsedMilliseconds;
+                }
             });
         }
         public void Dispose() {
@@ -285,13 +296,17 @@ namespace deleteSharpDX {
                 for (int zIndex = 0; zIndex < zNum; zIndex++) {
                     index = xIndex * zNum + zIndex;
                     // 位置坐标
-                    meshData.Vertices[index].Position   = new Vector3(xIndex, getNum(xIndex, zIndex), zIndex);
+                    meshData.Vertices[index].Position = new Vector3(xIndex * dx, getNum(xIndex * dx, zIndex * dz), zIndex * dz);
                     if (meshData.Vertices[index].Position.Y < 5) {
                         meshData.Vertices[index].Color = new Vector4(1, 1, 1, 1);
-                    } else if (meshData.Vertices[index].Position.Y < 10) {
+                    } else if (meshData.Vertices[index].Position.Y < 8) {
                         meshData.Vertices[index].Color = new Vector4(1, 0, 1, 1);
-                    } else if (meshData.Vertices[index].Position.Y < 15) {
+                    } else if (meshData.Vertices[index].Position.Y < 11) {
                         meshData.Vertices[index].Color = new Vector4(1, 1, 0, 1);
+                    } else if (meshData.Vertices[index].Position.Y < 14) {
+                        meshData.Vertices[index].Color = new Vector4(0.5f, 1, 1, 1);
+                    } else {
+                        meshData.Vertices[index].Color = new Vector4(1, 0.5f, 1, 1);
                     }
                     // 光照
                     meshData.Vertices[index].Normal     = new Vector3(0f, 1f, 0f);
