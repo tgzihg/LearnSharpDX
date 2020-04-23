@@ -82,23 +82,71 @@ namespace deleteSharpDX {
         private EffectPass mfxPass;
         private RenderForm _renderForm;
 
-        MeshData sphereMesh;
-        MeshData cylinderMesh;
+        MeshData sphMesh;
+        MeshData cylMesh;
         MeshData boxMesh;
-        MeshData planeMesh;
+        MeshData plaMesh;
         MeshData renderMesh;
+        private List<MyVertex> vertexsInOne;
+        private List<int> indicesInOne;
+        private int mSphVertexOffset;
+        private int mCylVertexOffset;
+        private int mPlaVertexOffset;
+        private int mSphIndexCount;
+        private int mCylIndexCount;
+        private int mPlaIndexCount;
+        private int mSphIndexOffset;
+        private int mCylIndexOffset;
+        private int mPlaIndexOffset;
+        private int totalVertexCount;
+        private int totalIndexCount;
 
         /// <summary>
         /// 初始化
         /// </summary>
         public MySharpDXForm() {
             //[0]生成两个几何体的MeshData
-            GenerateSphere(20, 10, 10, out sphereMesh);
-            GenerateCylinder(10, 10, 20, 100, 10, out cylinderMesh);
-            GenerateBox(10, 5, 2, 10, 5, 20, out boxMesh);
-            GeneratePlane(10, 5, 20, 10, out planeMesh);
-            renderMesh = sphereMesh;
-            //[1]常规代码
+            GenerateSphere(20, 10, 10, out sphMesh);
+            GenerateCylinder(10, 10, 20, 10, 10, out cylMesh);
+            GeneratePlane(20, 20, 10, 10, out plaMesh);
+            //[1]顶点缓冲区中各物体的 偏移量
+            mSphVertexOffset = 0;
+            mCylVertexOffset = sphMesh.Vertices.Length;
+            mPlaVertexOffset = mCylVertexOffset + cylMesh.Vertices.Length;
+            //[2]索引缓冲区中各物体的 大小
+            mSphIndexCount = sphMesh.Indices.Length;
+            mCylIndexCount = cylMesh.Indices.Length;
+            mPlaIndexCount = plaMesh.Indices.Length;
+            //[3]索引缓冲区中各物体的 偏移量
+            mSphIndexOffset = 0;
+            mCylIndexOffset = mSphIndexCount;
+            mPlaIndexOffset = mCylIndexOffset + mPlaIndexCount;
+            //[4]顶点和索引的总数
+            totalVertexCount = mPlaVertexOffset + plaMesh.Vertices.Length;
+            totalIndexCount = mSphIndexCount + mCylIndexCount + mPlaIndexCount;
+            //[5]将顶点缓冲区打包到一大块
+            vertexsInOne = new List<MyVertex>(totalVertexCount);
+            for (int i = 0; i < sphMesh.Vertices.Length; i++) {
+                vertexsInOne.Add(sphMesh.Vertices[i]);
+            }
+            for (int i = 0; i < cylMesh.Vertices.Length; i++) {
+                vertexsInOne.Add(cylMesh.Vertices[i]);
+            }
+            for (int i = 0; i < plaMesh.Vertices.Length; i++) {
+                vertexsInOne.Add(plaMesh.Vertices[i]);
+            }
+            //[6]将索引缓冲区打包到一大块
+            indicesInOne = new List<int>(totalIndexCount);
+            for (int i = 0; i < sphMesh.Indices.Length; i++) {
+                indicesInOne.Add(sphMesh.Indices[i]);
+            }
+            for (int i = 0; i < cylMesh.Indices.Length; i++) {
+                indicesInOne.Add(cylMesh.Indices[i]);
+            }
+            for (int i = 0; i < plaMesh.Indices.Length; i++) {
+                indicesInOne.Add(plaMesh.Indices[i]);
+            }
+            //[*]常规代码       
             DoCommonThings();
         }
         /// <summary>
@@ -141,12 +189,12 @@ namespace deleteSharpDX {
                 mfxWorldViewProj = effect.GetVariableByName("worldViewProj").AsMatrix();
             }
             _inputLayout = new D3D11.InputLayout(_d3DDevice, _inputShaderSignature, _inputElementsForMesh);
-            var CylVertexBuffer = D3D11.Buffer.Create<MyVertex>(_d3DDevice, BindFlags.VertexBuffer, renderMesh.Vertices);
-            var CylIndexBuffer = D3D11.Buffer.Create<int>(_d3DDevice, BindFlags.IndexBuffer, renderMesh.Indices);
+            var VertexBuffer = D3D11.Buffer.Create<MyVertex>(_d3DDevice, BindFlags.VertexBuffer, vertexsInOne.ToArray());
+            var IndexBuffer = D3D11.Buffer.Create<int>(_d3DDevice, BindFlags.IndexBuffer, indicesInOne.ToArray());
             _d3DDeviceContext.InputAssembler.InputLayout = _inputLayout;
             _d3DDeviceContext.InputAssembler.PrimitiveTopology = SharpDX.Direct3D.PrimitiveTopology.TriangleList;
-            _d3DDeviceContext.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(CylVertexBuffer, Utilities.SizeOf<MyVertex>(), 0));
-            _d3DDeviceContext.InputAssembler.SetIndexBuffer(CylIndexBuffer, Format.R32_UInt, 0);
+            _d3DDeviceContext.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(VertexBuffer, Utilities.SizeOf<MyVertex>(), 0));
+            _d3DDeviceContext.InputAssembler.SetIndexBuffer(IndexBuffer, Format.R32_UInt, 0);
             proj = Matrix.Identity;
             view = Matrix.LookAtLH(camPos, camTo, camUp);
             world = Matrix.Identity;
@@ -195,9 +243,11 @@ namespace deleteSharpDX {
                 mfxWorldViewProj.SetMatrix(worldViewProj);
                 mfxPass.Apply(_d3DDeviceContext);
                 //索引画图
-                _d3DDeviceContext.DrawIndexed(renderMesh.Indices.Length, 0, 0);
+                _d3DDeviceContext.DrawIndexed(mCylIndexCount, mCylIndexOffset, mCylVertexOffset);
+                _d3DDeviceContext.DrawIndexed(mPlaIndexCount, mPlaIndexOffset, mPlaVertexOffset);
+                _d3DDeviceContext.DrawIndexed(mSphIndexCount, mSphIndexOffset, mSphVertexOffset);
                 //顶点画图
-                //_d3DDeviceContext.Draw(renderMesh.Vertices.Length, 0);
+                //_d3DDeviceContext.Draw(vertexsInOne.Count, 0);
                 _swapChain.Present(0, PresentFlags.None);
                 fpsCounter++;
                 if (clock.ElapsedMilliseconds - lastTime >= 1000) {
