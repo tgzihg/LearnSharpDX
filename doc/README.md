@@ -558,4 +558,7 @@ private void GenerateBotFace(float topRadius, float bottomRadius, float height, 
 - 切面数量（沿着高度分割，stack）
 - 切片数量（沿着圆分割，slice）
 
-其建模思路与上面柱体相同。
+其建模思路与上面柱体相同。参照代码查看。
+
+## 6.11.4 多物体绘制
+同时绘制柱体、球体。结合各自物体的顶点数据和索引数据，分别放在顶点缓冲区和索引缓冲区中。

@@ -8,12 +8,12 @@ using SharpDX;
 using System.Windows.Forms;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace deleteSharpDX {
     class Program {
         static void Main(string[] args) {
             using (var demo = new MySharpDXForm()) {
-
             }
         }
     }
@@ -47,17 +47,9 @@ namespace deleteSharpDX {
         struct MeshData {
             public MyVertex[] Vertices;
             public int[] Indices;
-            public MeshData(int count) {
-                Vertices = new MyVertex[count];
-                Indices = new int[count];
-            }
-            public MeshData(int vertexCount, int indexCount) {
-                Vertices = new MyVertex[vertexCount];
-                Indices = new int[indexCount];
-            }
-            public void Resize2DQuad(int xNum, int zNum) {
-                Vertices = new MyVertex[xNum * zNum];
-                Indices = new int[(xNum - 1) * (zNum - 1) * 6];
+            public MeshData(int a = 1, int b = 1) {
+                Vertices = new MyVertex[a];
+                Indices = new int[b];
             }
         }
         private D3D11.InputElement[] _inputElementsForMesh = new D3D11.InputElement[] {
@@ -74,7 +66,7 @@ namespace deleteSharpDX {
         private Matrix worldViewProj;
 
         private Vector3 targetViewDir;
-        Vector3 camPos = new Vector3(0.0f, 2.0f, -5.0f);
+        Vector3 camPos = new Vector3(0.0f, 1.0f, -55.0f);
         Vector3 camTo = new Vector3(2f, 0f, 0f);
         Vector3 camUp = new Vector3(0f, 1f, 0f);
         private int dx;
@@ -89,26 +81,24 @@ namespace deleteSharpDX {
         private EffectPass mfxPassS;
         private EffectPass mfxPass;
         private RenderForm _renderForm;
+        private int drawNumber;
 
         /// <summary>
         /// 初始化
         /// </summary>
         public MySharpDXForm() {
             MeshData sphereMesh;
-            int sliceNum = 100;
-            int stackNum = 10;
-            int rad = 5;
-            GenerateSphere(rad, sliceNum, stackNum, out sphereMesh);
-            GenerateSphereIndex(sliceNum, stackNum, ref sphereMesh);
+            GenerateSphere(20, 10, 10, out sphereMesh);
+            GenerateSphereIndex(10, 10, ref sphereMesh);
             _renderForm = new RenderForm();
             _renderForm.ClientSize = new System.Drawing.Size(800, 600);
-            _renderForm.KeyDown += _renderForm_KeyDown;
+            //_renderForm.KeyDown += _renderForm_KeyDown;
             _renderForm.Text = "愉快的学习SharpDX";
             _renderForm.Icon = null;
             _renderForm.ResizeBegin += (object sender, EventArgs e) => { _resized = true; };
-            _renderForm.MouseDown += _renderForm_MouseDown;
-            _renderForm.MouseUp += _renderForm_MouseUp;
-            _renderForm.MouseMove += _renderForm_MouseMove;
+            //_renderForm.MouseDown += _renderForm_MouseDown;
+            //_renderForm.MouseUp += _renderForm_MouseUp;
+            //_renderForm.MouseMove += _renderForm_MouseMove;
             ModeDescription backBufferDesc = new ModeDescription(_renderForm.ClientSize.Width, _renderForm.ClientSize.Height, new Rational(60, 1), Format.R8G8B8A8_UNorm);
             SwapChainDescription swapChainDesc = new SwapChainDescription() {
                 ModeDescription = backBufferDesc,
@@ -125,7 +115,7 @@ namespace deleteSharpDX {
                 D3D11.DeviceCreationFlags.Debug,
                 swapChainDesc, out _d3DDevice, out _swapChain);
             _d3DDeviceContext = _d3DDevice.ImmediateContext;
-            using (var effectByteCode = ShaderBytecode.CompileFromFile("../../MyShader.fx", "fx_5_0")) {
+            using (var effectByteCode = ShaderBytecode.CompileFromFile("../../MyShader.fx", "fx_5_0", ShaderFlags.Debug | ShaderFlags.SkipOptimization)) {
                 var effect = new Effect(_d3DDevice, effectByteCode);
                 var technique = effect.GetTechniqueByName("ColorTech");
                 mfxPassW = technique.GetPassByName("P0");
@@ -186,14 +176,14 @@ namespace deleteSharpDX {
                 }
                 _d3DDeviceContext.ClearDepthStencilView(depthView, DepthStencilClearFlags.Depth, 1.0f, 0);
                 _d3DDeviceContext.ClearRenderTargetView(renderView, SharpDX.Color.Black);
-                var viewPort = new Viewport(0, 0, _renderForm.ClientSize.Width, _renderForm.ClientSize.Height, 0, 100f);
-                _d3DDeviceContext.Rasterizer.SetViewport(viewPort);
                 var viewProj = Matrix.Multiply(view, proj);
                 worldViewProj = world * viewProj;
                 mfxWorldViewProj.SetMatrix(worldViewProj);
                 mfxPass.Apply(_d3DDeviceContext);
-                _d3DDeviceContext.DrawIndexed(sphereMesh.Indices.Length, 0, 0);
-                //_d3DDeviceContext.Draw(sphereMesh.Vertices.Length, 0);
+                //_d3DDeviceContext.DrawIndexed(sphereMesh.Indices.Length, 0, 0);
+                _d3DDeviceContext.DrawIndexed(drawNumber, 0, 0);
+                drawNumber+=10;
+                Thread.Sleep(500);
                 _swapChain.Present(0, PresentFlags.None);
                 fpsCounter++;
                 if (clock.ElapsedMilliseconds - lastTime >= 1000) {
@@ -212,33 +202,26 @@ namespace deleteSharpDX {
         #region 几何网格
         private void GenerateSphere(int rad, int sliceNum, int stackNum, out MeshData sphereMesh) {
             // 侧面
-            var vertexsNum = (sliceNum + 1) * (stackNum - 1);
-            var indexNum = (sliceNum * (stackNum - 2)) * 6;
-
-            // 顶底点
-            vertexsNum += 1 * 2;
-            indexNum += sliceNum * 3 * 2;
-
-            sphereMesh = new MeshData(vertexsNum, indexNum);
+            sphereMesh = new MeshData(1, 1);
             float dTheta = 2.0f * (float)Math.PI / sliceNum;
             float dPhi = (float)Math.PI / stackNum;
             float Phi = 0;
-            int vetexNumber = 0;
-            // 底部
-            sphereMesh.Vertices[vetexNumber] = new MyVertex() {
+            var tempVertex = sphereMesh.Vertices.ToList();
+            tempVertex.Clear();
+            // 底部顶点
+            tempVertex.Add(new MyVertex() {
                 Position = new Vector3(0, -rad, 0),
                 Color = new Vector4(1, 0, 1, 1),
                 Normal = new Vector3(0, -1, 0),
                 TangentU = new Vector3(0, 0, 0),
                 TexC = new Vector2(0, 0),
-            };
-            vetexNumber++;
+            });
+            float layerColor = 0f;
             // 层层建模 侧面顶点数据
             for (int i = 1; i < stackNum; i++) {
                 // 建模中心 y 在中心高度处，从低往高建
                 float y = -rad * (float)Math.Cos(Phi + i * dPhi);
                 float r = rad * (float)Math.Sin(Phi + i * dPhi);
-                // vertices
                 // 起始顶点和最终顶点只是位置一样，但顶点其它分量不同
                 for (int j = 0; j <= sliceNum; j++) {
                     float c = (float)Math.Cos(j * dTheta);
@@ -248,34 +231,35 @@ namespace deleteSharpDX {
                     myVertex.TexC.X = (float)j / sliceNum;
                     myVertex.TexC.Y = 1.0f - (float)i / stackNum;
                     myVertex.TangentU = new Vector3(-s, 0f, c);
-                    myVertex.Color = new Vector4(1, 1, 1, 1);
+                    myVertex.Color = new Vector4(1, layerColor, 0.5f * layerColor, 1);
                     myVertex.Normal = new Vector3(1f, 0, 0);
-                    sphereMesh.Vertices[vetexNumber] = myVertex;
-                    vetexNumber++;
+                    tempVertex.Add(myVertex);
                 }
+                layerColor += 0.1f;
             }
             // 顶部
-            sphereMesh.Vertices[vetexNumber] = new MyVertex() {
+            tempVertex.Add(new MyVertex() {
                 Position = new Vector3(0, rad, 0),
                 Color = new Vector4(1, 1, 0, 1),
                 Normal = new Vector3(0, 1, 0),
                 TangentU = new Vector3(0, 0, 0),
                 TexC = new Vector2(0, 0),
-            };
-            vetexNumber++;
+            });
+            sphereMesh.Vertices = tempVertex.ToArray();
         }
         void GenerateSphereIndex(int sliceCount, int stackCount, ref MeshData refMesh) {
-            int number = 0;
             int numsPerRing = sliceCount + 1;
             List<int> tempIndice = refMesh.Indices.ToList();
+            tempIndice.Clear();
+            int number = 0;
             for (int i = 0; i < sliceCount; i++) {
                 tempIndice.Add(0);
                 tempIndice.Add(number + 1);
                 tempIndice.Add(number + 2);
-                number += 2;
+                number += 1;
             }
             for (int i = 0; i < stackCount - 2; i++) {
-                for (int j = 0; j < sliceCount; j++) {
+                for (int j = 1; j <= sliceCount; j++) {
                     tempIndice.Add(i * numsPerRing + j);
                     tempIndice.Add((i + 1) * numsPerRing + j);
                     tempIndice.Add((i + 1) * numsPerRing + j + 1);
@@ -287,9 +271,9 @@ namespace deleteSharpDX {
             number = 0;
             for (int i = 0; i < sliceCount; i++) {
                 tempIndice.Add(refMesh.Vertices.Length - 1);
-                tempIndice.Add(refMesh.Vertices.Length - number - 1);
-                tempIndice.Add(refMesh.Vertices.Length - number - 2);
-                number += 2;
+                tempIndice.Add(refMesh.Vertices.Length - 2 - number);
+                tempIndice.Add(refMesh.Vertices.Length - 3 - number);
+                number += 1;
             }
             refMesh.Indices = tempIndice.ToArray();
         }
@@ -365,6 +349,5 @@ namespace deleteSharpDX {
             }
         }
         #endregion
-
     }
 }
