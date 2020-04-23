@@ -374,8 +374,8 @@ technique11 TextureTech
 - 顶面半径
 - 底面半径
 - 柱体高度
-- 切面数量（高度分割）
-- 切片数量（圆分割）
+- 切面数量（沿着高度分割，stack）
+- 切片数量（沿着圆分割，slice）
 
 我们采用一种meshdata的数据结构：
 ```csharp
@@ -551,3 +551,11 @@ private void GenerateBotFace(float topRadius, float bottomRadius, float height, 
 其中Array<-->List<>的转换需要引用Linq。
 
 ![柱体几何体网格](imgJHTWG.png "柱体网格")
+
+### 6.11.2 自画球体网格
+决定球体网格的参数有：
+- 半径
+- 切面数量（沿着高度分割，stack）
+- 切片数量（沿着圆分割，slice）
+
+其建模思路与上面柱体相同。
