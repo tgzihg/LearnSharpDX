@@ -550,7 +550,7 @@ private void GenerateBotFace(float topRadius, float bottomRadius, float height, 
 
 其中Array<-->List<>的转换需要引用Linq。
 
-![柱体几何体网格](imgJHTWG.png "柱体网格")
+
 
 ### 6.11.2 自画球体网格
 决定球体网格的参数有：
@@ -559,6 +559,27 @@ private void GenerateBotFace(float topRadius, float bottomRadius, float height, 
 - 切片数量（沿着圆分割，slice）
 
 其建模思路与上面柱体相同。参照代码查看。
+
+### 6.11.3 基本几何体的图像
+几何体生成：顶点数据建模->顶点索引映射
+
+- 柱体：
+
+![柱体几何体网格](imgJHTWG.png "柱体网格")
+
+- 球面:
+
+![球面几何体网格](imgSPHERE.png "球面网格")
+
+- 平面:
+
+![平面几何体网格](imgPM.png "平面网格")
+
+- 长方体:【顶点索引暂未实现】
+
+![长方体几何网格](imgBOX.png "长方体网格")
+
+PS:此commit的源码中，在构造函数中初始化定义了四个几何体
 
 ## 6.11.4 多物体绘制
 同时绘制柱体、球体。结合各自物体的顶点数据和索引数据，分别放在顶点缓冲区和索引缓冲区中。
