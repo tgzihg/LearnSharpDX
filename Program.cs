@@ -105,13 +105,13 @@ namespace deleteSharpDX {
         /// 初始化
         /// </summary>
         public MySharpDXForm() {
-            //[0]生成两个几何体的MeshData
+            //[0]生成几何体的MeshData
             GenerateSphere(20, 10, 10, out sphMesh);
             GenerateCylinder(10, 10, 20, 10, 10, out cylMesh);
-            GeneratePlane(20, 20, 10, 10, out plaMesh);
+            GeneratePlane(40, 30, 20, 15, out plaMesh);
             //[1]顶点缓冲区中各物体的 偏移量
             mSphVertexOffset = 0;
-            mCylVertexOffset = sphMesh.Vertices.Length;
+            mCylVertexOffset = mSphVertexOffset + sphMesh.Vertices.Length;
             mPlaVertexOffset = mCylVertexOffset + cylMesh.Vertices.Length;
             //[2]索引缓冲区中各物体的 大小
             mSphIndexCount = sphMesh.Indices.Length;
@@ -119,11 +119,11 @@ namespace deleteSharpDX {
             mPlaIndexCount = plaMesh.Indices.Length;
             //[3]索引缓冲区中各物体的 偏移量
             mSphIndexOffset = 0;
-            mCylIndexOffset = mSphIndexCount;
-            mPlaIndexOffset = mCylIndexOffset + mPlaIndexCount;
+            mCylIndexOffset = mSphIndexOffset + mSphIndexCount;
+            mPlaIndexOffset = mCylIndexOffset + mCylIndexCount;
             //[4]顶点和索引的总数
             totalVertexCount = mPlaVertexOffset + plaMesh.Vertices.Length;
-            totalIndexCount = mSphIndexCount + mCylIndexCount + mPlaIndexCount;
+            totalIndexCount = mPlaIndexOffset + mPlaIndexCount;
             //[5]将顶点缓冲区打包到一大块
             vertexsInOne = new List<MyVertex>(totalVertexCount);
             for (int i = 0; i < sphMesh.Vertices.Length; i++) {
@@ -243,11 +243,11 @@ namespace deleteSharpDX {
                 mfxWorldViewProj.SetMatrix(worldViewProj);
                 mfxPass.Apply(_d3DDeviceContext);
                 //索引画图
-                _d3DDeviceContext.DrawIndexed(mCylIndexCount, mCylIndexOffset, mCylVertexOffset);
-                _d3DDeviceContext.DrawIndexed(mPlaIndexCount, mPlaIndexOffset, mPlaVertexOffset);
-                _d3DDeviceContext.DrawIndexed(mSphIndexCount, mSphIndexOffset, mSphVertexOffset);
+                //_d3DDeviceContext.DrawIndexed(mCylIndexCount, mCylIndexOffset, mCylVertexOffset);
+                //_d3DDeviceContext.DrawIndexed(mSphIndexCount, mSphIndexOffset, mSphVertexOffset);
+                //_d3DDeviceContext.DrawIndexed(mPlaIndexCount, mPlaIndexOffset, mPlaVertexOffset);
                 //顶点画图
-                //_d3DDeviceContext.Draw(vertexsInOne.Count, 0);
+                _d3DDeviceContext.Draw(vertexsInOne.Count, 0);
                 _swapChain.Present(0, PresentFlags.None);
                 fpsCounter++;
                 if (clock.ElapsedMilliseconds - lastTime >= 1000) {
@@ -287,7 +287,6 @@ namespace deleteSharpDX {
                 TangentU = new Vector3(0, 0, 0),
                 TexC = new Vector2(0, 0),
             });
-            float layerColor = 0f;
             //[2]层层建模 侧面顶点数据
             for (int i = 1; i < stackNum; i++) {
                 // 建模中心 y 在中心高度处，从低往高建
@@ -302,16 +301,15 @@ namespace deleteSharpDX {
                     myVertex.TexC.X = (float)j / sliceNum;
                     myVertex.TexC.Y = 1.0f - (float)i / stackNum;
                     myVertex.TangentU = new Vector3(-s, 0f, c);
-                    myVertex.Color = new Vector4(1, layerColor, 0.5f * layerColor, 1);
+                    myVertex.Color = new Vector4(1, 0, 1, 1);
                     myVertex.Normal = new Vector3(1f, 0, 0);
                     tempVertex.Add(myVertex);
                 }
-                layerColor += 0.1f;
             }
             //[3]顶部
             tempVertex.Add(new MyVertex() {
                 Position = new Vector3(0, rad, 0),
-                Color = new Vector4(1, 1, 0, 1),
+                Color = new Vector4(1, 0, 1, 1),
                 Normal = new Vector3(0, 1, 0),
                 TangentU = new Vector3(0, 0, 0),
                 TexC = new Vector2(0, 0),
@@ -386,7 +384,7 @@ namespace deleteSharpDX {
                     myVertex.TexC.X = (float)j / sliceCount;
                     myVertex.TexC.Y = 1.0f - (float)i / stackCount;
                     myVertex.TangentU = new Vector3(-s, 0f, c);
-                    myVertex.Color = new Vector4(1, 1, 1, 1);
+                    myVertex.Color = new Vector4(1, 1, 0, 1);
                     float dr = bottomRadius - topRadius;
                     Vector3 bitangent = new Vector3(dr * c, -height, dr * s);
                     myVertex.Normal = Vector3.Normalize(Vector3.Cross(myVertex.TangentU, bitangent));
@@ -458,7 +456,7 @@ namespace deleteSharpDX {
                 myVertex.TexC.X = x / height + 0.5f;
                 myVertex.TexC.Y = z / height + 0.5f;
                 myVertex.TangentU = new Vector3(1, 0, 0);
-                myVertex.Color = new Vector4(1, 0, 1, 1);
+                myVertex.Color = new Vector4(1, 1, 0, 1);
                 myVertex.Normal = new Vector3(0, -1, 0);
 
                 tempVertex.Add(myVertex);
@@ -469,7 +467,7 @@ namespace deleteSharpDX {
             myVertexCenter.TexC.X = 0.5f;
             myVertexCenter.TexC.Y = 0.5f;
             myVertexCenter.TangentU = new Vector3(1, 0, 0);
-            myVertexCenter.Color = new Vector4(1, 0, 1, 1);
+            myVertexCenter.Color = new Vector4(1, 1, 0, 1);
             myVertexCenter.Normal = new Vector3(0, -1, 0);
 
             tempVertex.Add(myVertexCenter);
@@ -537,41 +535,40 @@ namespace deleteSharpDX {
             //[0]顶点数据
             List<MyVertex> tempVertice = new List<MyVertex>();
             MyVertex tempVex;
-            lenNum += 1;
-            widNum += 1;
+            var lenPointNum = lenNum + 1;
+            var wdPointNum  = widNum + 1;
             float dl = length / lenNum;
             float dw = width / widNum;
             float y = 0f;
-            for (int i = 0; i < lenNum; i++) {
+            for (int i = 0; i < lenPointNum; i++) {
                 float x = -length / 2 + i * dl;
                 //第i列(从前往后)
-                for (int j = 0; j < widNum; j++) {
+                for (int j = 0; j < wdPointNum; j++) {
                     //第j行(从左往右)
                     float z = -width / 2 + j * dw;
                     tempVex = new MyVertex();
                     tempVex.Position = new Vector3(x, y, z);
-                    tempVex.Color = new Vector4(1, 1, 1, 1);
+                    tempVex.Color = new Vector4(0, 1, 1, 1);
                     tempVex.Normal = new Vector3(0, 1, 0);
                     tempVertice.Add(tempVex);
                 }
             }
             //[1]索引数据
             List<int> tempIndex = new List<int>();
-            for (int i = 0; i < lenNum - 1; i++) {
-                //第i列(从前往后)
-                for (int j = 0; j < widNum - 1; j++) {
-                    //第j行(从左往右)
-                    tempIndex.Add(i * widNum + j);
-                    tempIndex.Add(i * widNum + j + 1);
-                    tempIndex.Add((i + 1) * widNum + j + 1);
-                    tempIndex.Add((i + 1) * widNum + j + 1);
-                    tempIndex.Add((i + 1) * widNum + j);
-                    tempIndex.Add(i * widNum + j);
+            for (int i = 0; i < lenNum; i++) {
+                //第i列(从左往右)
+                for (int j = 0; j < widNum; j++) {
+                    //第j行(从前往后)
+                    tempIndex.Add(i * wdPointNum + j);
+                    tempIndex.Add(i * wdPointNum + j + 1);
+                    tempIndex.Add((i + 1) * wdPointNum + j + 1);
+                    tempIndex.Add((i + 1) * wdPointNum + j + 1);
+                    tempIndex.Add((i + 1) * wdPointNum + j);
+                    tempIndex.Add(i * wdPointNum + j);
                 }
             }
-
-            outMesh.Indices = tempIndex.ToArray();
             outMesh.Vertices = tempVertice.ToArray();
+            outMesh.Indices = tempIndex.ToArray();
         }
         #endregion
         #region Some Unimmportant Methods

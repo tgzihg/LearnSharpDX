@@ -91,6 +91,12 @@
     <None Include="doc\README.md" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="doc\imgBOX.png" />
+    <Content Include="doc\imgJHTWG.png" />
+    <Content Include="doc\imgPM.png" />
+    <Content Include="doc\imgShowInOne_L.png" />
+    <Content Include="doc\imgSPHERE.png" />
+    <Content Include="doc\imgZuHe1.png" />
     <Content Include="MyShader.fx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
