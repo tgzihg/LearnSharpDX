@@ -243,11 +243,11 @@ namespace deleteSharpDX {
                 mfxWorldViewProj.SetMatrix(worldViewProj);
                 mfxPass.Apply(_d3DDeviceContext);
                 //索引画图
-                //_d3DDeviceContext.DrawIndexed(mCylIndexCount, mCylIndexOffset, mCylVertexOffset);
-                //_d3DDeviceContext.DrawIndexed(mSphIndexCount, mSphIndexOffset, mSphVertexOffset);
-                //_d3DDeviceContext.DrawIndexed(mPlaIndexCount, mPlaIndexOffset, mPlaVertexOffset);
+                _d3DDeviceContext.DrawIndexed(mCylIndexCount, mCylIndexOffset, mCylVertexOffset);
+                _d3DDeviceContext.DrawIndexed(mSphIndexCount, mSphIndexOffset, mSphVertexOffset);
+                _d3DDeviceContext.DrawIndexed(mPlaIndexCount, mPlaIndexOffset, mPlaVertexOffset);
                 //顶点画图
-                _d3DDeviceContext.Draw(vertexsInOne.Count, 0);
+                //_d3DDeviceContext.Draw(vertexsInOne.Count, 0);
                 _swapChain.Present(0, PresentFlags.None);
                 fpsCounter++;
                 if (clock.ElapsedMilliseconds - lastTime >= 1000) {
