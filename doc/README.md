@@ -1,5 +1,7 @@
 ﻿# 学习SharpDX的笔记
-存储用SharpDX学习DirectX11过程的代码，从龙书11的*6.3 INDICES AND INDEX BUFFERS*一节开始记录的~ （虽然题目是SharpDX，因为书都是cpp，代码都是cpp，自行寻找对应的wrap版本）
+龙书11的*6.3 INDICES AND INDEX BUFFERS*一节开始记录的~ 
+
+使用C++、C#。
 
 ## 6.5 常量缓冲区
 在着色器*MyShader.fx*中，定义了cbuffer结构的一个实例——cbPerObject。该常量缓冲区中存储了一个矩阵，其能将点从局部空间变换到齐次裁剪空间中。通过effects框架，可以在运行阶段改变缓冲区中的内容。这提供了代码和着色器之间的通信方法。
@@ -604,3 +606,106 @@ PS:此commit的源码中，在构造函数中初始化定义了四个几何体�
 读取书中的头颅文件("model/skull.txt")，其中包含了顶点数据和索引数据。新建一个类——ModelReader。其构造器函数中实现了文件的读取。
 
 ![常量缓冲区](skull.png "常量缓冲区")
+
+### 6.13 动态顶点缓冲区
+
+动态缓冲区与静态缓冲区有所区别。
+1. 在创建时，动态缓冲区需要给CPU**写**的权限。在创建缓冲区时，需要给缓冲区以下的描述：
+- Usage: D3D11_USAGE_DYNAMIC
+- CPU access flag: D3D11_CPU_ACCESS_WRITE
+2. 要使用设备上下文的`Map()`与`Unmap()`函数。得到顶点缓冲区指针，CPU根据指针进行操作。
+
+`Map()`函数：
+```cpp
+HRESULT ID3D11DeviceContext::Map(
+  ID3D11Resource           *pResource,
+  UINT                     Subresource,
+  D3D11_MAP                MapType,
+  UINT                     MapFlags,
+  D3D11_MAPPED_SUBRESOURCE *pMappedResource
+);
+```
+其中：
+- pResource：指向资源的指针，该资源可以是纹理、缓冲区
+- Subresource：资源中的子资源索引。缓冲区中没有其它子资源，索引为0。
+- MapType：CPU操作资源的读/写权限
+  - D3D11_MAP_WRITE_DISCARD：丢弃原资源，指针指向一个新分配的地方。当我们在写入新的缓冲区时，程序会继续渲染之前的资源，不会终止。
+  - D3D11_MAP_WRITE_NO_OVERWRITE：写入到之前资源未初始化分配的地方。
+  - D3D11_MAP_READ：将GPU中的缓冲读取到系统内存。
+- MapFlags：GPU工作时CPU的行为，可选参数。
+- pMappedResource：返回的子资源指针，为`D3D11_MAPPED_SUBRESOURCE`类型。
+
+子资源`D3D11_MAPPED_SUBRESOURCE`的结构：
+```cpp
+typedef struct D3D11_MAPPED_SUBRESOURCE {
+  void *pData;
+  UINT RowPitch;
+  UINT DepthPitch;
+};
+```
+其中：
+- pData:指向数据的指针，该指针由Map()函数输出。使用前必须转换为符合资源的合理格式。转换格式后根据该指针可以读取/写入资源数据。
+- RowPitch:资源的每行所占的字节数。比如对2D纹理，这是一行的大小。
+- DepthPitch:资源每“深度”所占的字节数。比如对3D纹理，这是3D纹理子集中一个2D图形的字节大小。
+
+cpp代码使用动态缓冲区示例：
+```cpp
+D3D11_MAPPED_SUBRESOURCE mappedData;
+md3dImmediateContext->Map(
+	mWavesVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData);
+Vertex* v = reinterpret_cast<Vertex*>(mappedData.pData);
+for(UINT i = 0; i < mWaves.VertexCount(); ++i)
+{
+	v[i].Pos = mWaves[i];
+	v[i].Color = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+}
+md3dImmediateContext->Unmap(mWavesVB, 0);
+```
+更新完后必须要使用`Unmap()`
+
+### 6.13.1 动态顶点缓冲区的SharpDX实现
+在SharpDX中，在初始化阶段创建缓冲区时可以通过如下方法创建一个动态缓冲区：
+```csharp
+var VertexBuffer = D3D11.Buffer.Create<MyVertex>(
+	_d3DDevice, BindFlags.VertexBuffer, 
+	tempVertex.ToArray(), 0, 
+	ResourceUsage.Dynamic,CpuAccessFlags.Write
+);
+```
+注意`ResourceUsage.Dynamic`和`CpuAccessFlags.Write`的设置。
+
+建立动态缓冲区后，接着调用`DeviceContext`的实例方法——`MapSubresource()`，该方法对应cpp中的`Map()`。
+```csharp
+_d3DDeviceContext.MapSubresource(
+	VertexBuffer, MapMode.WriteDiscard,
+	D3D11.MapFlags.None, out dynamicDataStream);
+```
+其中`VertexBuffer`是建立的动态缓冲，`MapMode`设置为`WriteDiscard`，`MapFlags`为`None`，`dynamicDataStream`是`SharpDX.DataStream`类。其包含了指向资源的指针。
+
+接下来更新顶点信息即可。new一个`MyVertex[]`变量，包含了新的顶点信息。
+
+```csharp
+// 更新的缓冲区
+tempVertexEdited = new List<MyVertex>();
+tempVertexEdited.Add(new MyVertex(new Vector3(0, 0, 0), new Vector4(1, 1, 1, 1), new Vector3(0, 0, 0), new Vector3(0, 0, 0), new Vector2(0, 0)));
+tempVertexEdited.Add(new MyVertex(new Vector3(clock.ElapsedMilliseconds / 1000f, 0, 0), new Vector4(1, 1, 1, 1), new Vector3(0, 0, 0), new Vector3(0, 0, 0), new Vector2(0, 0)));
+tempVertexEdited.Add(new MyVertex(new Vector3(0, clock.ElapsedMilliseconds / 1000f, 0), new Vector4(1, 1, 1, 1), new Vector3(0, 0, 0), new Vector3(0, 0, 0), new Vector2(0, 0)));
+```
+
+接下来调用`DataStream`的实例方法`WriteRange()`，模板参数为顶点结构——`MyVertex`，参数是顶点结构数组——`MyVertex[]`。
+
+```csharp
+// 写缓冲区
+dynamicDataStream.WriteRange<MyVertex>(tempVertexEdited.ToArray());
+```
+除此之外，`DataStream`还有`Write()`方法，该方法接收单个顶点。如下面语句将两个顶点写到缓冲区：
+```csharp
+dynamicDataStream.Write<MyVertex>(tempVertex1);
+dynamicDataStream.Write<MyVertex>(tempVertex2);
+```
+其中`tempVertex1`和`tempVertex2`是两个新顶点。
+
+最后调用`UnmapSubresource()`方法，让更新缓冲区起作用。
+```csharp
+_d3DDeviceContext.UnmapSubresource(VertexBuffer, 0);
+```
