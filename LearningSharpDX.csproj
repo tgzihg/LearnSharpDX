@@ -82,6 +82,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ModelReader.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -97,6 +98,7 @@
     <Content Include="doc\imgShowInOne_L.png" />
     <Content Include="doc\imgSPHERE.png" />
     <Content Include="doc\imgZuHe1.png" />
+    <Content Include="model\skull.txt" />
     <Content Include="MyShader.fx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

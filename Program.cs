@@ -13,8 +13,44 @@ using System.Threading;
 namespace deleteSharpDX {
     class Program {
         static void Main(string[] args) {
+            Console.WriteLine("说明：");
+            Console.WriteLine("-移动位置： W A S D Q E");
+            Console.WriteLine("-旋转视角：鼠标");
+            Console.WriteLine("-模型旋转：R键开启或关闭，默认开启");
+            Console.WriteLine("默认窗口显示，建议按下*F5*切换到全屏模式进行更舒服地explorer");
+            Console.WriteLine("阅读完毕后，按下回车展示模型");
+
+            Console.ReadKey();
             using (var demo = new MySharpDXForm()) {
             }
+        }
+    }
+    /// <summary>
+    /// 自定义顶点结构
+    /// </summary>
+    struct MyVertex {
+        public Vector3 Position;
+        public Vector4 Color;
+        public Vector3 Normal;
+        public Vector3 TangentU;
+        public Vector2 TexC;
+        public MyVertex(Vector3 pos, Vector4 color, Vector3 nor, Vector3 tan, Vector2 tex) {
+            Position = pos;
+            Normal = nor;
+            TangentU = tan;
+            TexC = tex;
+            Color = color;
+        }
+    }
+    /// <summary>
+    /// 定义网格
+    /// </summary>
+    struct MeshData {
+        public MyVertex[] Vertices;
+        public int[] Indices;
+        public MeshData(int a = 1, int b = 1) {
+            Vertices = new MyVertex[a];
+            Indices = new int[b];
         }
     }
     class MySharpDXForm : IDisposable {
@@ -24,34 +60,7 @@ namespace deleteSharpDX {
         private InputLayout _inputLayout;
         private ShaderSignature _inputShaderSignature;
         private EffectMatrixVariable mfxWorldViewProj;
-        /// <summary>
-        /// 自定义顶点结构
-        /// </summary>
-        struct MyVertex {
-            public Vector3 Position;
-            public Vector4 Color;
-            public Vector3 Normal;
-            public Vector3 TangentU;
-            public Vector2 TexC;
-            public MyVertex(Vector3 pos, Vector4 color, Vector3 nor, Vector3 tan, Vector2 tex) {
-                Position = pos;
-                Normal = nor;
-                TangentU = tan;
-                TexC = tex;
-                Color = color;
-            }
-        }
-        /// <summary>
-        /// 定义网格
-        /// </summary>
-        struct MeshData {
-            public MyVertex[] Vertices;
-            public int[] Indices;
-            public MeshData(int a = 1, int b = 1) {
-                Vertices = new MyVertex[a];
-                Indices = new int[b];
-            }
-        }
+        
         private D3D11.InputElement[] _inputElementsForMesh = new D3D11.InputElement[] {
                 new D3D11.InputElement("POSITION", 0, Format.R32G32B32_Float, 0),
                 new D3D11.InputElement("COLOR", 0, Format.R32G32B32A32_Float, 0),
@@ -66,8 +75,8 @@ namespace deleteSharpDX {
         private Matrix worldViewProj;
 
         private Vector3 targetViewDir;
-        Vector3 camPos = new Vector3(0.0f, 1.0f, -55.0f);
-        Vector3 camTo = new Vector3(2f, 0f, 0f);
+        Vector3 camPos = new Vector3(0.0f, 5.0f, -25.0f);
+        Vector3 camTo = new Vector3(0f, 0f, 0f);
         Vector3 camUp = new Vector3(0f, 1f, 0f);
         private int dx;
         private int dy;
@@ -103,11 +112,16 @@ namespace deleteSharpDX {
         private List<Matrix> mSphWorld;
         private List<Matrix> mCylWorld;
         private List<Matrix> mPlaWorld;
+        private MeshData skullMeshData;
+        private int modelRotate = 1;
 
         /// <summary>
         /// 初始化
         /// </summary>
         public MySharpDXForm() {
+            ModelReader modelReader = new ModelReader("../../model/skull.txt");
+            skullMeshData = modelReader.meshData;
+            //以下对此次commit无用
             //[0]生成几何体的MeshData
             GenerateSphere(2, 10, 10, out sphMesh);
             GenerateCylinder(2, 3, 10, 10, 10, out cylMesh);
@@ -161,7 +175,7 @@ namespace deleteSharpDX {
                 mCylWorld.Add(Matrix.Translation(new Vector3(10f, 5f, i * 15.0f)));
             }
             mPlaWorld.Add(Matrix.Translation(new Vector3(0f, 0f, 40f)));
-            //[*]常规代码       
+            //[*]常规代码
             DoCommonThings();
         }
         /// <summary>
@@ -204,15 +218,15 @@ namespace deleteSharpDX {
                 mfxWorldViewProj = effect.GetVariableByName("worldViewProj").AsMatrix();
             }
             _inputLayout = new D3D11.InputLayout(_d3DDevice, _inputShaderSignature, _inputElementsForMesh);
-            var VertexBuffer = D3D11.Buffer.Create<MyVertex>(_d3DDevice, BindFlags.VertexBuffer, vertexsInOne.ToArray());
-            var IndexBuffer = D3D11.Buffer.Create<int>(_d3DDevice, BindFlags.IndexBuffer, indicesInOne.ToArray());
+            var VertexBuffer = D3D11.Buffer.Create<MyVertex>(_d3DDevice, BindFlags.VertexBuffer, skullMeshData.Vertices.ToArray());
+            var IndexBuffer = D3D11.Buffer.Create<int>(_d3DDevice, BindFlags.IndexBuffer, skullMeshData.Indices.ToArray());
             _d3DDeviceContext.InputAssembler.InputLayout = _inputLayout;
             _d3DDeviceContext.InputAssembler.PrimitiveTopology = SharpDX.Direct3D.PrimitiveTopology.TriangleList;
             _d3DDeviceContext.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(VertexBuffer, Utilities.SizeOf<MyVertex>(), 0));
             _d3DDeviceContext.InputAssembler.SetIndexBuffer(IndexBuffer, Format.R32_UInt, 0);
             proj = Matrix.Identity;
             view = Matrix.LookAtLH(camPos, camTo, camUp);
-            world = Matrix.Identity;
+            world = Matrix.Scaling(2f, 2f, 2f);
             _resized = true;
             Texture2D backBuffer = null;
             RenderTargetView renderView = null;
@@ -220,8 +234,10 @@ namespace deleteSharpDX {
             DepthStencilView depthView = null;
             long lastTime = 0;
             var clock = new System.Diagnostics.Stopwatch();
+            var modelClock = new System.Diagnostics.Stopwatch();
             clock.Start();
             int fpsCounter = 0;
+            float beforeStopRotate = 0;
             RenderLoop.Run(_renderForm, () => {
                 targetViewDir = new Vector3(targetX, targetY, targetZ);
                 view = Matrix.LookAtLH(camPos, camPos + targetViewDir, camUp);
@@ -254,25 +270,36 @@ namespace deleteSharpDX {
                 _d3DDeviceContext.ClearDepthStencilView(depthView, DepthStencilClearFlags.Depth, 1.0f, 0);
                 _d3DDeviceContext.ClearRenderTargetView(renderView, SharpDX.Color.Black);
                 var viewProj = Matrix.Multiply(view, proj);
-                //画球
-                for (int i = 0; i < 10; i++) {
-                    worldViewProj = mSphWorld[i] * viewProj;
-                    mfxWorldViewProj.SetMatrix(worldViewProj);
-                    mfxPass.Apply(_d3DDeviceContext);
-                    _d3DDeviceContext.DrawIndexed(mSphIndexCount, mSphIndexOffset, mSphVertexOffset);
+                ////画球
+                //for (int i = 0; i < 10; i++) {
+                //    worldViewProj = mSphWorld[i] * viewProj;
+                //    mfxWorldViewProj.SetMatrix(worldViewProj);
+                //    mfxPass.Apply(_d3DDeviceContext);
+                //    _d3DDeviceContext.DrawIndexed(mSphIndexCount, mSphIndexOffset, mSphVertexOffset);
+                //}
+                ////画柱体
+                //for (int i = 0; i < 10; i++) {
+                //    worldViewProj = mCylWorld[i] * viewProj;
+                //    mfxWorldViewProj.SetMatrix(worldViewProj);
+                //    mfxPass.Apply(_d3DDeviceContext);
+                //    _d3DDeviceContext.DrawIndexed(mCylIndexCount, mCylIndexOffset, mCylVertexOffset);
+                //}
+                ////画平面
+                //worldViewProj = mPlaWorld[0] * viewProj;
+                //mfxWorldViewProj.SetMatrix(worldViewProj);
+                //mfxPass.Apply(_d3DDeviceContext);
+                //_d3DDeviceContext.DrawIndexed(mPlaIndexCount, mPlaIndexOffset, mPlaVertexOffset);
+                if (modelRotate == 1) {
+                    modelClock.Start();
+                    worldViewProj = Matrix.RotationY(modelClock.ElapsedMilliseconds / 1000f) * world * viewProj;
+                } else {
+                    modelClock.Stop();
+                    beforeStopRotate = modelClock.ElapsedMilliseconds;
+                    worldViewProj = Matrix.RotationY(beforeStopRotate / 1000f) * world * viewProj;
                 }
-                //画柱体
-                for (int i = 0; i < 10; i++) {
-                    worldViewProj = mCylWorld[i] * viewProj;
-                    mfxWorldViewProj.SetMatrix(worldViewProj);
-                    mfxPass.Apply(_d3DDeviceContext);
-                    _d3DDeviceContext.DrawIndexed(mCylIndexCount, mCylIndexOffset, mCylVertexOffset);
-                }
-                //画平面
-                worldViewProj = mPlaWorld[0] * viewProj;
                 mfxWorldViewProj.SetMatrix(worldViewProj);
                 mfxPass.Apply(_d3DDeviceContext);
-                _d3DDeviceContext.DrawIndexed(mPlaIndexCount, mPlaIndexOffset, mPlaVertexOffset);
+                _d3DDeviceContext.DrawIndexed(skullMeshData.Indices.Length, 0, 0);
                 _swapChain.Present(0, PresentFlags.None);
                 fpsCounter++;
                 if (clock.ElapsedMilliseconds - lastTime >= 1000) {
@@ -656,11 +683,16 @@ namespace deleteSharpDX {
                 case System.Windows.Forms.Keys.Escape:
                     _renderForm.Close();
                     break;
+                // 切换pass
                 case System.Windows.Forms.Keys.Z:
                     mfxPass = mfxPassW;
                     break;
                 case System.Windows.Forms.Keys.X:
                     mfxPass = mfxPassS;
+                    break;
+                // 旋转停止/开启
+                case System.Windows.Forms.Keys.R:
+                    modelRotate = 1 - modelRotate;
                     break;
                 default:
                     break;
