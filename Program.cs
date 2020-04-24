@@ -100,15 +100,18 @@ namespace deleteSharpDX {
         private int mPlaIndexOffset;
         private int totalVertexCount;
         private int totalIndexCount;
+        private List<Matrix> mSphWorld;
+        private List<Matrix> mCylWorld;
+        private List<Matrix> mPlaWorld;
 
         /// <summary>
         /// 初始化
         /// </summary>
         public MySharpDXForm() {
             //[0]生成几何体的MeshData
-            GenerateSphere(20, 10, 10, out sphMesh);
-            GenerateCylinder(10, 10, 20, 10, 10, out cylMesh);
-            GeneratePlane(40, 30, 20, 15, out plaMesh);
+            GenerateSphere(2, 10, 10, out sphMesh);
+            GenerateCylinder(2, 3, 10, 10, 10, out cylMesh);
+            GeneratePlane(100, 100, 40, 40, out plaMesh);
             //[1]顶点缓冲区中各物体的 偏移量
             mSphVertexOffset = 0;
             mCylVertexOffset = mSphVertexOffset + sphMesh.Vertices.Length;
@@ -146,6 +149,18 @@ namespace deleteSharpDX {
             for (int i = 0; i < plaMesh.Indices.Length; i++) {
                 indicesInOne.Add(plaMesh.Indices[i]);
             }
+            //[7]生成各自的世界矩阵
+            mSphWorld = new List<Matrix>(10);
+            mCylWorld = new List<Matrix>(10);
+            mPlaWorld = new List<Matrix>(1);
+            for (int i = 0; i < 5; i++) {
+                mSphWorld.Add(Matrix.Translation(new Vector3(-10f, 12f, i * 15.0f)));
+                mSphWorld.Add(Matrix.Translation(new Vector3(10f, 12f, i * 15.0f)));
+
+                mCylWorld.Add(Matrix.Translation(new Vector3(-10f, 5f, i * 15.0f)));
+                mCylWorld.Add(Matrix.Translation(new Vector3(10f, 5f, i * 15.0f)));
+            }
+            mPlaWorld.Add(Matrix.Translation(new Vector3(0f, 0f, 40f)));
             //[*]常规代码       
             DoCommonThings();
         }
@@ -233,21 +248,31 @@ namespace deleteSharpDX {
                     depthView = new DepthStencilView(_d3DDevice, depthBuffer);
                     _d3DDeviceContext.Rasterizer.SetViewport(new Viewport(0, 0, _renderForm.ClientSize.Width, _renderForm.ClientSize.Height, 0.0f, 1.0f));
                     _d3DDeviceContext.OutputMerger.SetTargets(depthView, renderView);
-                    proj = Matrix.PerspectiveFovLH((float)Math.PI / 4f, _renderForm.ClientSize.Width / (float)_renderForm.ClientSize.Height, 0.1f, 100f);
+                    proj = Matrix.PerspectiveFovLH((float)Math.PI / 4f, _renderForm.ClientSize.Width / (float)_renderForm.ClientSize.Height, 0.1f, 1000f);
                     _resized = false;
                 }
                 _d3DDeviceContext.ClearDepthStencilView(depthView, DepthStencilClearFlags.Depth, 1.0f, 0);
                 _d3DDeviceContext.ClearRenderTargetView(renderView, SharpDX.Color.Black);
                 var viewProj = Matrix.Multiply(view, proj);
-                worldViewProj = world * viewProj;
+                //画球
+                for (int i = 0; i < 10; i++) {
+                    worldViewProj = mSphWorld[i] * viewProj;
+                    mfxWorldViewProj.SetMatrix(worldViewProj);
+                    mfxPass.Apply(_d3DDeviceContext);
+                    _d3DDeviceContext.DrawIndexed(mSphIndexCount, mSphIndexOffset, mSphVertexOffset);
+                }
+                //画柱体
+                for (int i = 0; i < 10; i++) {
+                    worldViewProj = mCylWorld[i] * viewProj;
+                    mfxWorldViewProj.SetMatrix(worldViewProj);
+                    mfxPass.Apply(_d3DDeviceContext);
+                    _d3DDeviceContext.DrawIndexed(mCylIndexCount, mCylIndexOffset, mCylVertexOffset);
+                }
+                //画平面
+                worldViewProj = mPlaWorld[0] * viewProj;
                 mfxWorldViewProj.SetMatrix(worldViewProj);
                 mfxPass.Apply(_d3DDeviceContext);
-                //索引画图
-                _d3DDeviceContext.DrawIndexed(mCylIndexCount, mCylIndexOffset, mCylVertexOffset);
-                _d3DDeviceContext.DrawIndexed(mSphIndexCount, mSphIndexOffset, mSphVertexOffset);
                 _d3DDeviceContext.DrawIndexed(mPlaIndexCount, mPlaIndexOffset, mPlaVertexOffset);
-                //顶点画图
-                //_d3DDeviceContext.Draw(vertexsInOne.Count, 0);
                 _swapChain.Present(0, PresentFlags.None);
                 fpsCounter++;
                 if (clock.ElapsedMilliseconds - lastTime >= 1000) {
