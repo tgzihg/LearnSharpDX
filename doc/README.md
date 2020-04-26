@@ -1,4 +1,4 @@
-﻿# 学习SharpDX的笔记
+﻿# 学习SharpDX的笔记 第六章 
 龙书11的*6.3 INDICES AND INDEX BUFFERS*一节开始记录的~ 
 
 使用C++、C#。

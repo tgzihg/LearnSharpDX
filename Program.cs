@@ -13,8 +13,17 @@ using System.Threading;
 namespace deleteSharpDX {
     class Program {
         static void Main(string[] args) {
-            using (var demo = new MySharpDXForm()) {
-            }
+            Tools m = new Tools();
+            Matrix a = new Matrix(
+                1, 0, 0, 0,
+                0, 0.5f, 0, 0,
+                0, 0, 0.5f, 0,
+                1, 1, 1, 1
+                );
+            Matrix b = m.InverseTranspose(a);
+            Console.WriteLine(b);
+            //using (var demo = new MySharpDXForm()) {
+            //}
         }
     }
     /// <summary>
@@ -216,7 +225,6 @@ namespace deleteSharpDX {
                 }
             });
         }
-
         public void Dispose() {
             _swapChain.Dispose();
             _d3DDevice.Dispose();
@@ -294,5 +302,65 @@ namespace deleteSharpDX {
             }
         }
         #endregion
+    }
+    class Tools {
+        /// <summary>
+        /// 计算三个点组成的平面的 单位法线向量
+        /// </summary>
+        /// <param name="v1"></param>
+        /// <param name="v2"></param>
+        /// <param name="v3"></param>
+        /// <returns></returns>
+        public Vector3 ComputeNormal(Vector3 v1, Vector3 v2, Vector3 v3) {
+            Vector3 temp;
+            Vector3 u = v2 - v1;
+            Vector3 v = v3 - v1;
+            temp = Vector3.Cross(u, v);
+            temp = Vector3.Normalize(temp);
+            return temp;
+        }
+        /// <summary>
+        /// 计算一组三角形网格中每个顶点的Normal值
+        /// 1.对每个三角形片元分析，根据*三个顶点*的坐标位置计算出该片元的法向矢量
+        /// 2.将法向矢量赋值给三个顶点
+        /// 3.对有片元进行处理完毕后，每个顶点的normal值是所有*与之相邻的片元法向矢量的和*
+        /// 4.最后遍历每个顶点，对Norma值归一化即可
+        /// </summary>
+        /// <param name="inputVex"></param>
+        /// <param name="inputInd"></param>
+        public void ComputeVertexNormal(ref MyVertex[] inputVex, int[] inputInd) {
+            // 遍历每个三角形片元
+            for (int i = 0; i < inputInd.Length/3; i++) {
+                // 三角形对应的三个顶点索引
+                int i0 = inputInd[i * 3 + 0];
+                int i1 = inputInd[i * 3 + 1];
+                int i2 = inputInd[i * 3 + 2];
+                // 三角形三个顶点
+                MyVertex v0 = inputVex[i0];
+                MyVertex v1 = inputVex[i1];
+                MyVertex v2 = inputVex[i2];
+                // 计算平面法向矢量
+                Vector3 e0 = v1.Position - v0.Position;
+                Vector3 e1 = v2.Position - v0.Position;
+                Vector3 faceNormal = Vector3.Cross(e0, e1);
+                // 因为这个三角形占用了这三个顶点
+                // 因此这三个顶点的normal值应该添加该平面三角形的法线向量
+                inputVex[i0].Normal += faceNormal;
+                inputVex[i1].Normal += faceNormal;
+                inputVex[i2].Normal += faceNormal;
+            }
+            // 遍历每个顶点，将其Normal值归一化
+            for (int i = 0; i < inputVex.Length; i++) {
+                inputVex[i].Normal = Vector3.Normalize(inputVex[i].Normal);
+            }
+        }
+        /// <summary>
+        /// 计算逆转置矩阵
+        /// </summary>
+        /// <param name="m"></param>
+        /// <returns></returns>
+        public Matrix InverseTranspose(Matrix m) {
+            return Matrix.Transpose(Matrix.Invert(m));
+        }
     }
 }
