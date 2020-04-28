@@ -139,7 +139,7 @@ namespace deleteSharpDX {
 
         private Matrix proj;
         private Matrix view;
-        private Matrix world;
+        private Matrix[] world;
         private Matrix worldViewProj;
 
         private Vector3 targetViewDir;
@@ -166,12 +166,17 @@ namespace deleteSharpDX {
         private EffectMatrixVariable mfxWorldTranInv;
         private RenderForm _renderForm;
 
-        private MeshData skullMeshData;
+        private MeshData mMeshData;
+        private MeshData[] mSubMeshData;
+        int[] vexNum;
+        int[] vexOff;
+        int[] indNum;
+        int[] indOff;
 
         DirectionalLight mDirLight;
-        PointLight mPointLight;
-        SpotLight mSpotLight;
-        Material mSkullMat;
+        PointLight  mPointLight;
+        SpotLight   mSpotLight;
+        Material[]  mMatArray = new Material[2];
         //光照
         private byte[] _dirLightArray   = new byte[Marshal.SizeOf(typeof(DirectionalLight)) * 1];
         private byte[] _pointLightArray = new byte[Marshal.SizeOf(typeof(PointLight)) * 1];
@@ -183,9 +188,14 @@ namespace deleteSharpDX {
         /// 初始化
         /// </summary>
         public MySharpDXForm() {
+            mSubMeshData = new MeshData[3];
             //读取模型
-            ModelReader modelReader = new ModelReader("../../model/skull.txt");
-            skullMeshData = modelReader.meshData;
+            ModelReader modelReader = new ModelReader("skull.txt");
+            mSubMeshData[0] = modelReader.meshData;
+            Tools.GeneratePlane(50, 50, 50, 50, out mSubMeshData[1]);
+            Tools.GenerateCylinder(5, 6, 10, 10, 5, out mSubMeshData[2]);
+            Tools.PackMeshDataInOne(mSubMeshData, out mMeshData, out vexNum, out vexOff, out indNum, out indOff);
+
             //初始化光源
             mDirLight = new DirectionalLight();
             mDirLight.Ambient   = new Vector4(0.2f, 0.2f, 0.2f, 1.0f);
@@ -197,8 +207,8 @@ namespace deleteSharpDX {
             mPointLight.Ambient = new Vector4(0.3f, 0.3f, 0.3f, 1.0f);
             mPointLight.Diffuse = new Vector4(0.7f, 0.7f, 0.7f, 1.0f);
             mPointLight.Specular= new Vector4(0.7f, 0.7f, 0.7f, 1.0f);
-            mPointLight.Att = new Vector3(0.0f, 0.1f, 0.0f);
-            mPointLight.Range = 25.0f;
+            mPointLight.Att = new Vector3(0.0f, 0.01f, 0.0f);
+            mPointLight.Range = 15.0f;
             mPointLight.Position = new Vector3(0.0f, 10f, 0.0f);
 
             mSpotLight = new SpotLight();
@@ -212,10 +222,13 @@ namespace deleteSharpDX {
             mSpotLight.Direction = Vector3.Normalize(camTo-camPos);
 
             //材质
-            mSkullMat = new Material();
-            mSkullMat.Ambient = new Vector4(0.48f, 0.77f, 0.46f, 1.0f);
-            mSkullMat.Diffuse = new Vector4(0.48f, 0.77f, 0.46f, 1.0f);
-            mSkullMat.Specular = new Vector4(0.2f, 0.2f, 0.2f, 16.0f);
+            mMatArray[0].Ambient = new Vector4(0.48f, 0.77f, 0.46f, 1.0f);
+            mMatArray[0].Diffuse = new Vector4(0.48f, 0.77f, 0.46f, 1.0f);
+            mMatArray[0].Specular = new Vector4(0.2f, 0.2f, 0.2f, 16.0f);
+
+            mMatArray[1].Ambient = new Vector4(0.8f, 0.8f, 0.8f, 1.0f);
+            mMatArray[1].Diffuse = new Vector4(0.48f, 0.77f, 0.46f, 1.0f);
+            mMatArray[1].Specular = new Vector4(0.2f, 0.2f, 0.2f, 16.0f);
 
             //[*]常规代码
             DoCommonThings();
@@ -249,7 +262,7 @@ namespace deleteSharpDX {
                 D3D11.DeviceCreationFlags.Debug,
                 swapChainDesc, out _d3DDevice, out _swapChain);
             _d3DDeviceContext = _d3DDevice.ImmediateContext;
-            using (var effectByteCode = ShaderBytecode.CompileFromFile("../../MyShader.fx", "fx_5_0", ShaderFlags.Debug | ShaderFlags.SkipOptimization)) {
+            using (var effectByteCode = ShaderBytecode.CompileFromFile("MyShader.fx", "fx_5_0", ShaderFlags.Debug | ShaderFlags.SkipOptimization)) {
                 var effect = new Effect(_d3DDevice, effectByteCode);
                 var technique = effect.GetTechniqueByName("LightTech");
 
@@ -276,15 +289,22 @@ namespace deleteSharpDX {
                 _inputShaderSignature = ShaderSignature.GetInputSignature(passSignature);
             }
             _inputLayout = new D3D11.InputLayout(_d3DDevice, _inputShaderSignature, _inputElementsForMesh);
-            var VertexBuffer = D3D11.Buffer.Create<MyVertex>(_d3DDevice, BindFlags.VertexBuffer, skullMeshData.Vertices.ToArray());
-            var IndexBuffer = D3D11.Buffer.Create<int>(_d3DDevice, BindFlags.IndexBuffer, skullMeshData.Indices.ToArray());
+            var VertexBuffer = D3D11.Buffer.Create<MyVertex>(_d3DDevice, BindFlags.VertexBuffer, mMeshData.Vertices.ToArray());
+            var IndexBuffer = D3D11.Buffer.Create<int>(_d3DDevice, BindFlags.IndexBuffer, mMeshData.Indices.ToArray());
             _d3DDeviceContext.InputAssembler.InputLayout = _inputLayout;
             _d3DDeviceContext.InputAssembler.PrimitiveTopology = SharpDX.Direct3D.PrimitiveTopology.TriangleList;
             _d3DDeviceContext.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(VertexBuffer, Utilities.SizeOf<MyVertex>(), 0));
             _d3DDeviceContext.InputAssembler.SetIndexBuffer(IndexBuffer, Format.R32_UInt, 0);
             proj = Matrix.Identity;
             view = Matrix.LookAtLH(camPos, camTo, camUp);
-            world = Matrix.Identity;
+            world = new Matrix[3];
+            //初始化world矩阵
+            //for (int i = 0; i < world.Length; i++) {
+            //    world[i] = Matrix.Identity;
+            //}
+            world[0] = Matrix.Translation(new Vector3(0, 0, 0));
+            world[1] = Matrix.Translation(new Vector3(0, 0, 0));
+            world[2] = Matrix.Translation(new Vector3(0, 5f, 0));
             _resized = true;
             Texture2D backBuffer = null;
             RenderTargetView renderView = null;
@@ -326,13 +346,6 @@ namespace deleteSharpDX {
                 _d3DDeviceContext.ClearDepthStencilView(depthView, DepthStencilClearFlags.Depth, 1.0f, 0);
                 _d3DDeviceContext.ClearRenderTargetView(renderView, SharpDX.Color.Blue);
                 var viewProj = Matrix.Multiply(view, proj);
-                world = Matrix.RotationAxis(Vector3.UnitY, clock.ElapsedMilliseconds / 1000f);
-                worldViewProj = world * viewProj;
-
-                //像素着色器计算需要的变量
-                mfxWorld.SetMatrix(world);
-                mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world));
-                mfxWorldViewProj.SetMatrix(worldViewProj);
 
                 //设置光
                 var d = Tools.StructureToBytes(mDirLight);
@@ -340,26 +353,104 @@ namespace deleteSharpDX {
                 using (var dataStream = DataStream.Create(_dirLightArray, false, false)) {
                     mfxDirLight.SetRawValue(dataStream, _dirLightArray.Length);
                 }
+
                 d = Tools.StructureToBytes(mPointLight);
                 Array.Copy(d, 0, _pointLightArray, 0, Marshal.SizeOf(typeof(PointLight)));
                 using (var dataStream = DataStream.Create(_pointLightArray, false, false)) {
                     mfxPointLight.SetRawValue(dataStream, _pointLightArray.Length);
                 }
+
+                mSpotLight.Position = camPos;
+                mSpotLight.Direction = Vector3.Normalize(camTo - camPos);
                 d = Tools.StructureToBytes(mSpotLight);
                 Array.Copy(d, 0, _spotLightArray, 0, Marshal.SizeOf(typeof(SpotLight)));
                 using (var dataStream = DataStream.Create(_spotLightArray, false, false)) {
                     mfxSpotLight.SetRawValue(dataStream, _spotLightArray.Length);
                 }
 
+                //[0]画骷髅头
+                world[0] = Matrix.Translation(new Vector3(0, 10f, 0)) * Matrix.RotationAxis(Vector3.UnitY, clock.ElapsedMilliseconds / 1000f);
+                //设置每个物体不同的world矩阵
+                worldViewProj = world[0] * viewProj;
+
+                //像素着色器计算需要的变量
+                mfxWorld.SetMatrix(world[0]);
+                mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[0]));
+                mfxWorldViewProj.SetMatrix(worldViewProj);
+
                 //设置材质
-                d = Tools.StructureToBytes(mSkullMat);
+                d = Tools.StructureToBytes(mMatArray[0]);
                 Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
                 using (var dataStream = DataStream.Create(_matArray, false, false)) {
                     mfxMaterial.SetRawValue(dataStream, _matArray.Length);
                 }
 
                 mfxPass.Apply(_d3DDeviceContext);
-                _d3DDeviceContext.DrawIndexed(skullMeshData.Indices.Length, 0, 0);
+                _d3DDeviceContext.DrawIndexed(mSubMeshData[0].Indices.Length, indOff[0], vexOff[0]);
+
+                //[1]画平面
+                //world[1] = Matrix.Identity;
+                //设置每个物体不同的world矩阵
+                worldViewProj = world[1] * viewProj;
+
+                //像素着色器计算需要的变量
+                mfxWorld.SetMatrix(world[1]);
+                mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[1]));
+                mfxWorldViewProj.SetMatrix(worldViewProj);
+
+                //设置材质
+                d = Tools.StructureToBytes(mMatArray[1]);
+                Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
+                using (var dataStream = DataStream.Create(_matArray, false, false)) {
+                    mfxMaterial.SetRawValue(dataStream, _matArray.Length);
+                }
+
+                mfxPass.Apply(_d3DDeviceContext);
+                _d3DDeviceContext.DrawIndexed(mSubMeshData[1].Indices.Length, indOff[1], vexOff[1]);
+
+                //[2]画圆柱
+                //world[2] = Matrix.Identity;
+                //设置每个物体不同的world矩阵
+                worldViewProj = world[2] * viewProj;
+
+                //像素着色器计算需要的变量
+                mfxWorld.SetMatrix(world[2]);
+                mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[2]));
+                mfxWorldViewProj.SetMatrix(worldViewProj);
+
+                //设置材质
+                d = Tools.StructureToBytes(mMatArray[1]);
+                Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
+                using (var dataStream = DataStream.Create(_matArray, false, false)) {
+                    mfxMaterial.SetRawValue(dataStream, _matArray.Length);
+                }
+
+                mfxPass.Apply(_d3DDeviceContext);
+                _d3DDeviceContext.DrawIndexed(mSubMeshData[2].Indices.Length, indOff[2], vexOff[2]);
+
+                ////画不同的物体
+                //for (int i = 0; i < mSubMeshData.Length; i++) {
+                //    //设置每个物体不同的world矩阵
+                //    worldViewProj = world[i] * viewProj;
+
+                //    //像素着色器计算需要的变量
+                //    mfxWorld.SetMatrix(world[i]);
+                //    mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[i]));
+                //    mfxWorldViewProj.SetMatrix(worldViewProj);
+
+                //    //设置材质
+                //    d = Tools.StructureToBytes(mMatArray[i]);
+                //    Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
+                //    using (var dataStream = DataStream.Create(_matArray, false, false)) {
+                //        mfxMaterial.SetRawValue(dataStream, _matArray.Length);
+                //    }
+
+                //    mfxPass.Apply(_d3DDeviceContext);
+                //    _d3DDeviceContext.DrawIndexed(mSubMeshData[i].Indices.Length, indOff[i], vexOff[i]);
+                //}
+
+
+
                 _swapChain.Present(0, PresentFlags.None);
                 fpsCounter++;
                 if (clock.ElapsedMilliseconds - lastTime >= 1000) {
@@ -523,5 +614,282 @@ namespace deleteSharpDX {
             Marshal.FreeHGlobal(ptr);
             return buf;
         }
+        #region 生成基本几何体
+        /// <summary>
+        /// 生成球体
+        /// </summary>
+        /// <param name="rad">球体半径</param>
+        /// <param name="sliceNum">切片数</param>
+        /// <param name="stackNum">断层数</param>
+        /// <param name="sphereMesh">输出的MeshData网格结构</param>
+        public static void GenerateSphere(int rad, int sliceNum, int stackNum, out MeshData sphereMesh) {
+            //[0]侧面
+            sphereMesh = new MeshData(1, 1);
+            float dTheta = 2.0f * (float)Math.PI / sliceNum;
+            float dPhi = (float)Math.PI / stackNum;
+            float Phi = 0;
+            var tempVertex = sphereMesh.Vertices.ToList();
+            tempVertex.Clear();
+            //[1]底部顶点
+            tempVertex.Add(new MyVertex() {
+                Position = new Vector3(0, -rad, 0),
+                Normal = new Vector3(0, -1, 0),
+            });
+            float layerColor = 0f;
+            //[2]层层建模 侧面顶点数据
+            for (int i = 1; i < stackNum; i++) {
+                // 建模中心 y 在中心高度处，从低往高建
+                float y = -rad * (float)Math.Cos(Phi + i * dPhi);
+                float r = rad * (float)Math.Sin(Phi + i * dPhi);
+                // 起始顶点和最终顶点只是位置一样，但顶点其它分量不同
+                for (int j = 0; j <= sliceNum; j++) {
+                    float c = (float)Math.Cos(j * dTheta);
+                    float s = (float)Math.Sin(j * dTheta);
+                    MyVertex myVertex = new MyVertex();
+                    myVertex.Position = new Vector3(r * c, y, r * s);
+                    myVertex.Normal = new Vector3(0, 1f, 0);
+                    tempVertex.Add(myVertex);
+                }
+                layerColor += 0.1f;
+            }
+            //[3]顶部
+            tempVertex.Add(new MyVertex() {
+                Position = new Vector3(0, rad, 0),
+                Normal = new Vector3(0, 1, 0),
+            });
+            sphereMesh.Vertices = tempVertex.ToArray();
+
+            //[4]索引部分
+            int numsPerRing = sliceNum + 1;
+            List<int> tempIndice = sphereMesh.Indices.ToList();
+            tempIndice.Clear();
+            int number = 0;
+            for (int i = 0; i < sliceNum; i++) {
+                tempIndice.Add(0);
+                tempIndice.Add(number + 1);
+                tempIndice.Add(number + 2);
+                number += 1;
+            }
+            for (int i = 0; i < stackNum - 2; i++) {
+                for (int j = 1; j <= sliceNum; j++) {
+                    tempIndice.Add(i * numsPerRing + j);
+                    tempIndice.Add((i + 1) * numsPerRing + j);
+                    tempIndice.Add((i + 1) * numsPerRing + j + 1);
+                    tempIndice.Add((i + 1) * numsPerRing + j + 1);
+                    tempIndice.Add(i * numsPerRing + j + 1);
+                    tempIndice.Add(i * numsPerRing + j);
+                }
+            }
+            number = 0;
+            for (int i = 0; i < sliceNum; i++) {
+                tempIndice.Add(sphereMesh.Vertices.Length - 1);
+                tempIndice.Add(sphereMesh.Vertices.Length - 2 - number);
+                tempIndice.Add(sphereMesh.Vertices.Length - 3 - number);
+                number += 1;
+            }
+            sphereMesh.Indices = tempIndice.ToArray();
+        }
+        /// <summary>
+        /// 生成柱体
+        /// </summary>
+        /// <param name="topRadius">顶部半径</param>
+        /// <param name="bottomRadius">底部半径</param>
+        /// <param name="height">高度</param>
+        /// <param name="sliceCount">切片数</param>
+        /// <param name="stackCount">断层数</param>
+        /// <param name="outMesh">输出的MeshData网格结构</param>
+        public static void GenerateCylinder(float topRadius, float bottomRadius, float height, int sliceCount, int stackCount, out MeshData outMesh) {
+            //[0] 侧面数据
+            // init meshdata size
+            var vertexsNum = (stackCount + 1) * (sliceCount + 1);
+            var indexNum = stackCount * sliceCount * 6;
+            outMesh = new MeshData(vertexsNum, indexNum);
+            // Stacks
+            float stackHeight = height / stackCount;
+            // radius increment
+            float radiusStep = (topRadius - bottomRadius) / stackCount;
+            // ring count
+            var ringCount = stackCount + 1;
+            int vetexNumber = 0;
+            float dTheta = 2.0f * (float)Math.PI / sliceCount;
+            // 层层建模 侧面顶点数据
+            for (int i = 0; i < ringCount; i++) {
+                // 建模中心 y 在中心高度处，从低往高建
+                float y = -0.5f * height + i * stackHeight;
+                float r = bottomRadius + i * radiusStep;
+                // vertices
+                // 起始顶点和最终顶点只是位置一样，但顶点其它分量不同
+                for (int j = 0; j <= sliceCount; j++) {
+                    float c = (float)Math.Cos(j * dTheta);
+                    float s = (float)Math.Sin(j * dTheta);
+                    MyVertex myVertex = new MyVertex();
+                    myVertex.Position = new Vector3(r * c, y, r * s);
+                    float dr = bottomRadius - topRadius;
+                    Vector3 bitangent = new Vector3(dr * c, -height, dr * s);
+                    myVertex.Normal = Vector3.Normalize(Vector3.Cross(new Vector3(-s, 0f, c), bitangent));
+                    outMesh.Vertices[vetexNumber] = myVertex;
+                    vetexNumber++;
+                }
+            }
+
+            //[1] 修改索引
+            int number = 0;
+            int numsPerRing = sliceCount + 1;
+            for (int i = 0; i < stackCount; i++) {
+                for (int j = 0; j < sliceCount; j++) {
+                    outMesh.Indices[number + 0] = i * numsPerRing + j;
+                    outMesh.Indices[number + 1] = (i + 1) * numsPerRing + j;
+                    outMesh.Indices[number + 2] = (i + 1) * numsPerRing + j + 1;
+                    outMesh.Indices[number + 3] = (i + 1) * numsPerRing + j + 1;
+                    outMesh.Indices[number + 4] = i * numsPerRing + j + 1;
+                    outMesh.Indices[number + 5] = i * numsPerRing + j;
+                    number += 6;
+                }
+            }
+
+            //[2] 顶面数据和索引
+            // 顶面顶点数据
+            List<MyVertex> tempVertex = outMesh.Vertices.ToList();
+            for (int i = 0; i <= sliceCount; i++) {
+                float x = (float)(topRadius * Math.Cos(i * dTheta));
+                float z = (float)(topRadius * Math.Sin(i * dTheta));
+                MyVertex myVertex = new MyVertex();
+                myVertex.Position = new Vector3(x, 0.5f * height, z);
+                myVertex.Normal = new Vector3(0, 1, 0);
+
+                tempVertex.Add(myVertex);
+            }
+            // 顶点中心数据
+            var myVertexCenter = new MyVertex();
+            myVertexCenter.Position = new Vector3(0, 0.5f * height, 0);
+            myVertexCenter.Normal = new Vector3(0, 1, 0);
+
+            tempVertex.Add(myVertexCenter);
+            outMesh.Vertices = tempVertex.ToArray();
+
+            // 顶面索引
+            List<int> tempIndices = outMesh.Indices.ToList();
+            for (int i = 0; i <= sliceCount; i++) {
+                tempIndices.Add(outMesh.Vertices.Length - 1);
+                tempIndices.Add(outMesh.Vertices.Length - 2 - i);
+                tempIndices.Add(outMesh.Vertices.Length - 1 - i);
+            }
+            outMesh.Indices = tempIndices.ToArray();
+
+            //[3] 底面数据和索引
+            // 底面顶点数据
+            tempVertex = outMesh.Vertices.ToList();
+            for (int i = 0; i <= sliceCount; i++) {
+                float x = (float)(topRadius * Math.Cos(i * dTheta));
+                float z = (float)(topRadius * Math.Sin(i * dTheta));
+                MyVertex myVertex = new MyVertex();
+                myVertex.Position = new Vector3(x, -0.5f * height, z);
+                myVertex.Normal = new Vector3(0, -1, 0);
+
+                tempVertex.Add(myVertex);
+            }
+            // 顶点中心数据
+            myVertexCenter = new MyVertex();
+            myVertexCenter.Position = new Vector3(0, -0.5f * height, 0);
+            myVertexCenter.Normal = new Vector3(0, -1, 0);
+
+            tempVertex.Add(myVertexCenter);
+            outMesh.Vertices = tempVertex.ToArray();
+
+            // 顶面索引
+            tempIndices = outMesh.Indices.ToList();
+            for (int i = 0; i <= sliceCount; i++) {
+                tempIndices.Add(outMesh.Vertices.Length - 1);
+                tempIndices.Add(outMesh.Vertices.Length - 2 - i);
+                tempIndices.Add(outMesh.Vertices.Length - 1 - i);
+            }
+            outMesh.Indices = tempIndices.ToArray();
+        }
+        /// <summary>
+        /// 生成平面
+        /// </summary>
+        /// <param name="length">平面长度 X方向</param>
+        /// <param name="width">平面宽度 Z方向</param>
+        /// <param name="lenNum">X方向切片数</param>
+        /// <param name="widNum">Z方向切片数</param>
+        /// <param name="outMesh">输出数据</param>
+        public static void GeneratePlane(float length, float width, int lenNum, int widNum, out MeshData outMesh) {
+            //[0]顶点数据
+            List<MyVertex> tempVertice = new List<MyVertex>();
+            MyVertex tempVex;
+            lenNum += 1;
+            widNum += 1;
+            float dl = length / lenNum;
+            float dw = width / widNum;
+            float y = 0f;
+            for (int i = 0; i < lenNum; i++) {
+                float x = -length / 2 + i * dl;
+                //第i列(从前往后)
+                for (int j = 0; j < widNum; j++) {
+                    //第j行(从左往右)
+                    float z = -width / 2 + j * dw;
+                    tempVex = new MyVertex();
+                    tempVex.Position = new Vector3(x, y, z);
+                    tempVex.Normal = new Vector3(0, 1, 0);
+                    tempVertice.Add(tempVex);
+                }
+            }
+            //[1]索引数据
+            List<int> tempIndex = new List<int>();
+            for (int i = 0; i < lenNum - 1; i++) {
+                //第i列(从前往后)
+                for (int j = 0; j < widNum - 1; j++) {
+                    //第j行(从左往右)
+                    tempIndex.Add(i * widNum + j);
+                    tempIndex.Add(i * widNum + j + 1);
+                    tempIndex.Add((i + 1) * widNum + j + 1);
+                    tempIndex.Add((i + 1) * widNum + j + 1);
+                    tempIndex.Add((i + 1) * widNum + j);
+                    tempIndex.Add(i * widNum + j);
+                }
+            }
+
+            outMesh.Indices = tempIndex.ToArray();
+            outMesh.Vertices = tempVertice.ToArray();
+        }
+        #endregion
+        /// <summary>
+        /// 将输入的结构打包成一个，显示出来
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="dest"></param>
+        public static void PackMeshDataInOne(MeshData[] source, out MeshData dest,
+            out int[] vexNum, out int[] vexOffset,
+            out int[] indNum, out int[] indOffset) {
+            vexNum    = new int[source.Length];
+            indNum    = new int[source.Length];
+            vexOffset = new int[source.Length];
+            indOffset = new int[source.Length];
+            vexOffset[0] = 0;
+            indOffset[0] = 0;
+            for (int i = 0; i < source.Length; i++) {
+                vexNum[i] = source[i].Vertices.Length;
+                indNum[i] = source[i].Indices.Length;
+                if (i+1 >= vexOffset.Length) {
+                    break;
+                }
+                vexOffset[i + 1] += vexOffset[i] + vexNum[i];
+                indOffset[i + 1] += indOffset[i] + indNum[i];
+            }
+            var totalVexNum = vexNum.Sum();
+            var totalIndNum = indNum.Sum();
+            var vertexsInOne = new List<MyVertex>(totalVexNum);
+            var indicesInOne = new List<int>(totalIndNum);
+            foreach (var subModel in source) {
+                for (int i = 0; i < subModel.Vertices.Length; i++) {
+                    vertexsInOne.Add(subModel.Vertices[i]);
+                }
+                for (int i = 0; i < subModel.Indices.Length; i++) {
+                    indicesInOne.Add(subModel.Indices[i]);
+                }
+            }
+            dest = new MeshData() { Vertices = vertexsInOne.ToArray(), Indices = indicesInOne.ToArray() };
+        }
+
     }
 }

@@ -205,3 +205,7 @@ public static byte[] StructureToBytes<T>(T obj) where T : struct {
 ![聚光灯](skull_onlySpot.png "聚光灯")
 
 ![组合光源](skull_allLight.png "组合光源")
+
+定义数组保存模型及其相关数据。做一个简单的demo：
+
+![简单光照组合体示例](lightAndZuhe.png "光照简单组合体示例")
