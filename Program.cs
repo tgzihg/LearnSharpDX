@@ -9,21 +9,21 @@ using System.Windows.Forms;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Runtime.InteropServices;
 
 namespace deleteSharpDX {
     class Program {
         static void Main(string[] args) {
-            Tools m = new Tools();
-            Matrix a = new Matrix(
-                1, 0, 0, 0,
-                0, 0.5f, 0, 0,
-                0, 0, 0.5f, 0,
-                1, 1, 1, 1
-                );
-            Matrix b = m.InverseTranspose(a);
-            Console.WriteLine(b);
-            //using (var demo = new MySharpDXForm()) {
-            //}
+            //Console.WriteLine("说明：");
+            //Console.WriteLine("-移动位置： W A S D Q E");
+            //Console.WriteLine("-旋转视角：鼠标");
+            //Console.WriteLine("-模型旋转：R键开启或关闭，默认开启");
+            //Console.WriteLine("默认窗口显示，建议按下*F5*切换到全屏模式进行更舒服地explorer");
+            //Console.WriteLine("阅读完毕后，按下回车展示模型");
+
+            //Console.ReadKey();
+            using (var demo = new MySharpDXForm()) {
+            }
         }
     }
     /// <summary>
@@ -31,16 +31,10 @@ namespace deleteSharpDX {
     /// </summary>
     struct MyVertex {
         public Vector3 Position;
-        public Vector4 Color;
         public Vector3 Normal;
-        public Vector3 TangentU;
-        public Vector2 TexC;
-        public MyVertex(Vector3 pos, Vector4 color, Vector3 nor, Vector3 tan, Vector2 tex) {
+        public MyVertex(Vector3 pos, Vector3 nor) {
             Position = pos;
             Normal = nor;
-            TangentU = tan;
-            TexC = tex;
-            Color = color;
         }
     }
     /// <summary>
@@ -54,6 +48,82 @@ namespace deleteSharpDX {
             Indices = new int[b];
         }
     }
+    #region 光照
+    /// <summary>
+    /// 材质
+    /// </summary>
+    struct Material {
+        public Vector4 Ambient;
+        public Vector4 Diffuse;
+        public Vector4 Specular;
+        public Vector4 Reflect;
+
+        public Material(Vector4 ambient, Vector4 diffuse, Vector4 specular, Vector4 reflect) {
+            Ambient = ambient;
+            Diffuse = diffuse;
+            Specular = specular;
+            Reflect = reflect;
+        }
+    }
+    /// <summary>
+    /// 平行光
+    /// </summary>
+    struct DirectionalLight {
+        public Vector4 Ambient;
+        public Vector4 Diffuse;
+        public Vector4 Specular;
+        public Vector3 Direction;
+        public float Pad;
+        public DirectionalLight(Vector4 ambient, Vector4 diffuse, Vector4 specular, Vector3 direction, float pad) {
+            Ambient = ambient;
+            Diffuse = diffuse;
+            Specular = specular;
+            Direction = direction;
+            Pad = pad;
+        }
+    }
+    /// <summary>
+    /// 点光源
+    /// </summary>
+    struct PointLight {
+        public Vector4 Ambient;
+        public Vector4 Diffuse;
+        public Vector4 Specular;
+        // 包装成4D向量
+        public Vector3 Position;
+        public float Range;
+        // 包装成4D向量
+        public Vector3 Att;
+        public float Pad;
+
+        public PointLight(Vector4 ambient, Vector4 diffuse, Vector4 specular, Vector3 position, float range, Vector3 att, float pad) {
+            Ambient = ambient;
+            Diffuse = diffuse;
+            Specular = specular;
+            Position = position;
+            Range = range;
+            Att = att;
+            Pad = pad;
+        }
+    }
+    /// <summary>
+    /// 聚光灯
+    /// </summary>
+    struct SpotLight {
+        public Vector4 Ambient;
+        public Vector4 Diffuse;
+        public Vector4 Specular;
+        // 包装成4D向量
+        public Vector3 Position;
+        public float Range;
+        // 包装成4D向量
+        public Vector3 Direction;
+        public float Spot;
+        // 包装成4D向量
+        public Vector3 Att;
+        public float Pad;
+    }
+    #endregion
     class MySharpDXForm : IDisposable {
         private D3D11.Device _d3DDevice;
         private D3D11.DeviceContext _d3DDeviceContext;
@@ -61,13 +131,10 @@ namespace deleteSharpDX {
         private InputLayout _inputLayout;
         private ShaderSignature _inputShaderSignature;
         private EffectMatrixVariable mfxWorldViewProj;
-        
+
         private D3D11.InputElement[] _inputElementsForMesh = new D3D11.InputElement[] {
                 new D3D11.InputElement("POSITION", 0, Format.R32G32B32_Float, 0),
-                new D3D11.InputElement("COLOR", 0, Format.R32G32B32A32_Float, 0),
                 new D3D11.InputElement("NORMAL", 0, Format.R32G32B32_Float, 0),
-                new D3D11.InputElement("TANGENTU", 0, Format.R32G32B32_Float, 0),
-                new D3D11.InputElement("TEXC", 0, Format.R32G32_Float, 0),
         };
 
         private Matrix proj;
@@ -76,7 +143,7 @@ namespace deleteSharpDX {
         private Matrix worldViewProj;
 
         private Vector3 targetViewDir;
-        Vector3 camPos = new Vector3(0f, 0f, -25.0f);
+        Vector3 camPos = new Vector3(0f, 3f, -13.0f);
         Vector3 camTo = new Vector3(0f, 0f, 0f);
         Vector3 camUp = new Vector3(0f, 1f, 0f);
         private int dx;
@@ -87,25 +154,69 @@ namespace deleteSharpDX {
         private System.Drawing.Point preMouse;
         private bool _resized;
         private bool rotateFlag;
+        private EffectVariable mfxDirLight;
+        private EffectVariable mfxPointLight;
+        private EffectVariable mfxSpotLight;
+        private EffectVariable mfxEyePosW;
+        private EffectVariable mfxMaterial;
         private EffectPass mfxPassW;
         private EffectPass mfxPassS;
         private EffectPass mfxPass;
+        private EffectMatrixVariable mfxWorld;
+        private EffectMatrixVariable mfxWorldTranInv;
         private RenderForm _renderForm;
 
-        private List<MyVertex> tempVertexEdited;
-        private List<MyVertex> tempVertex;
-        private DataStream dynamicDataStream;
+        private MeshData skullMeshData;
+
+        DirectionalLight mDirLight;
+        PointLight mPointLight;
+        SpotLight mSpotLight;
+        Material mSkullMat;
+        //光照
+        private byte[] _dirLightArray   = new byte[Marshal.SizeOf(typeof(DirectionalLight)) * 1];
+        private byte[] _pointLightArray = new byte[Marshal.SizeOf(typeof(PointLight)) * 1];
+        private byte[] _spotLightArray  = new byte[Marshal.SizeOf(typeof(SpotLight)) * 1];
+        //材料
+        private byte[] _matArray = new byte[Marshal.SizeOf(typeof(Material)) * 1];
 
         /// <summary>
         /// 初始化
         /// </summary>
         public MySharpDXForm() {
-            //[临时]动态缓冲区
-            tempVertex = new List<MyVertex>();
-            tempVertex.Add(new MyVertex(new Vector3(0, 0, 0), new Vector4(1, 1, 1, 1), new Vector3(0, 0, 0), new Vector3(0, 0, 0), new Vector2(0, 0)));
-            tempVertex.Add(new MyVertex(new Vector3(1, 0, 0), new Vector4(1, 1, 1, 1), new Vector3(0, 0, 0), new Vector3(0, 0, 0), new Vector2(0, 0)));
-            tempVertex.Add(new MyVertex(new Vector3(0, 1, 0), new Vector4(1, 1, 1, 1), new Vector3(0, 0, 0), new Vector3(0, 0, 0), new Vector2(0, 0)));
-            
+            //读取模型
+            ModelReader modelReader = new ModelReader("../../model/skull.txt");
+            skullMeshData = modelReader.meshData;
+            //初始化光源
+            mDirLight = new DirectionalLight();
+            mDirLight.Ambient   = new Vector4(0.2f, 0.2f, 0.2f, 1.0f);
+            mDirLight.Diffuse   = new Vector4(0.5f, 0.5f, 0.5f, 1.0f);
+            mDirLight.Specular  = new Vector4(0.5f, 0.5f, 0.5f, 1.0f);
+            mDirLight.Direction = new Vector3(0.57735f, -0.57735f, 0.57735f);
+
+            mPointLight = new PointLight();
+            mPointLight.Ambient = new Vector4(0.3f, 0.3f, 0.3f, 1.0f);
+            mPointLight.Diffuse = new Vector4(0.7f, 0.7f, 0.7f, 1.0f);
+            mPointLight.Specular= new Vector4(0.7f, 0.7f, 0.7f, 1.0f);
+            mPointLight.Att = new Vector3(0.0f, 0.1f, 0.0f);
+            mPointLight.Range = 25.0f;
+            mPointLight.Position = new Vector3(0.0f, 10f, 0.0f);
+
+            mSpotLight = new SpotLight();
+            mSpotLight.Ambient = new Vector4(0.0f, 0.0f, 0.0f, 1.0f);
+            mSpotLight.Diffuse = new Vector4(1.0f, 1.0f, 0.0f, 1.0f);
+            mSpotLight.Specular= new Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+            mSpotLight.Att = new Vector3(1.0f, 0.0f, 0.0f);
+            mSpotLight.Spot = 96.0f;
+            mSpotLight.Range = 10000.0f;
+            mSpotLight.Position = camPos;
+            mSpotLight.Direction = Vector3.Normalize(camTo-camPos);
+
+            //材质
+            mSkullMat = new Material();
+            mSkullMat.Ambient = new Vector4(0.48f, 0.77f, 0.46f, 1.0f);
+            mSkullMat.Diffuse = new Vector4(0.48f, 0.77f, 0.46f, 1.0f);
+            mSkullMat.Specular = new Vector4(0.2f, 0.2f, 0.2f, 16.0f);
+
             //[*]常规代码
             DoCommonThings();
         }
@@ -140,19 +251,37 @@ namespace deleteSharpDX {
             _d3DDeviceContext = _d3DDevice.ImmediateContext;
             using (var effectByteCode = ShaderBytecode.CompileFromFile("../../MyShader.fx", "fx_5_0", ShaderFlags.Debug | ShaderFlags.SkipOptimization)) {
                 var effect = new Effect(_d3DDevice, effectByteCode);
-                var technique = effect.GetTechniqueByName("ColorTech");
+                var technique = effect.GetTechniqueByName("LightTech");
+
+                //光照
+                mfxDirLight     = effect.GetVariableByName("gDirLight");
+                mfxPointLight   = effect.GetVariableByName("gPointLight");
+                mfxSpotLight    = effect.GetVariableByName("gSpotLight");
+                
+                mfxEyePosW      = effect.GetVariableByName("gEyePosW");
+
+                //材质
+                mfxMaterial = effect.GetVariableByName("gMaterial");
+
+                //pass
                 mfxPassW = technique.GetPassByName("P0");
                 mfxPassS = technique.GetPassByName("P1");
-                mfxPass = mfxPassW;
+                mfxPass = mfxPassS;
+                
+                mfxWorld = effect.GetVariableByName("gWorld").AsMatrix();
+                mfxWorldTranInv = effect.GetVariableByName("gWorldInvTranspose").AsMatrix();
+                mfxWorldViewProj = effect.GetVariableByName("gWorldViewProj").AsMatrix();
+
                 var passSignature = mfxPassW.Description.Signature;
                 _inputShaderSignature = ShaderSignature.GetInputSignature(passSignature);
-                mfxWorldViewProj = effect.GetVariableByName("worldViewProj").AsMatrix();
             }
             _inputLayout = new D3D11.InputLayout(_d3DDevice, _inputShaderSignature, _inputElementsForMesh);
-            var VertexBuffer = D3D11.Buffer.Create<MyVertex>(_d3DDevice, BindFlags.VertexBuffer, tempVertex.ToArray(),0,ResourceUsage.Dynamic,CpuAccessFlags.Write);
+            var VertexBuffer = D3D11.Buffer.Create<MyVertex>(_d3DDevice, BindFlags.VertexBuffer, skullMeshData.Vertices.ToArray());
+            var IndexBuffer = D3D11.Buffer.Create<int>(_d3DDevice, BindFlags.IndexBuffer, skullMeshData.Indices.ToArray());
             _d3DDeviceContext.InputAssembler.InputLayout = _inputLayout;
             _d3DDeviceContext.InputAssembler.PrimitiveTopology = SharpDX.Direct3D.PrimitiveTopology.TriangleList;
             _d3DDeviceContext.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(VertexBuffer, Utilities.SizeOf<MyVertex>(), 0));
+            _d3DDeviceContext.InputAssembler.SetIndexBuffer(IndexBuffer, Format.R32_UInt, 0);
             proj = Matrix.Identity;
             view = Matrix.LookAtLH(camPos, camTo, camUp);
             world = Matrix.Identity;
@@ -194,28 +323,43 @@ namespace deleteSharpDX {
                     proj = Matrix.PerspectiveFovLH((float)Math.PI / 4f, _renderForm.ClientSize.Width / (float)_renderForm.ClientSize.Height, 0.1f, 1000f);
                     _resized = false;
                 }
-
-                // map
-                _d3DDeviceContext.MapSubresource(VertexBuffer, MapMode.WriteDiscard, D3D11.MapFlags.None, out dynamicDataStream);
-                // 更新的缓冲区
-                tempVertexEdited = new List<MyVertex>();
-                tempVertexEdited.Add(new MyVertex(new Vector3(0, 0, 0), new Vector4(1, 0, 1, 1), new Vector3(0, 0, 0), new Vector3(0, 0, 0), new Vector2(0, 0)));
-                tempVertexEdited.Add(new MyVertex(new Vector3(0, clock.ElapsedMilliseconds / 1000f, 0), new Vector4(0, 1, 1, 1), new Vector3(0, 0, 0), new Vector3(0, 0, 0), new Vector2(0, 0)));
-                tempVertexEdited.Add(new MyVertex(new Vector3(clock.ElapsedMilliseconds / 1000f, 0, 0), new Vector4(1, 1, 0, 1), new Vector3(0, 0, 0), new Vector3(0, 0, 0), new Vector2(0, 0)));
-                // 写缓冲区
-                dynamicDataStream.WriteRange<MyVertex>(tempVertexEdited.ToArray());
-                //dynamicDataStream.Write<MyVertex>(new MyVertex(new Vector3(clock.ElapsedMilliseconds / 1000f, 0, 0), new Vector4(1, 0, 1, 1), new Vector3(0, 0, 0), new Vector3(0, 0, 0), new Vector2(0, 0)));
-                //dynamicDataStream.Write<MyVertex>(new MyVertex(new Vector3(0, clock.ElapsedMilliseconds / 1000f, 0), new Vector4(1, 0, 1, 1), new Vector3(0, 0, 0), new Vector3(0, 0, 0), new Vector2(0, 0)));
-                // unmap
-                _d3DDeviceContext.UnmapSubresource(VertexBuffer, 0);
-
                 _d3DDeviceContext.ClearDepthStencilView(depthView, DepthStencilClearFlags.Depth, 1.0f, 0);
-                _d3DDeviceContext.ClearRenderTargetView(renderView, SharpDX.Color.Black);
+                _d3DDeviceContext.ClearRenderTargetView(renderView, SharpDX.Color.Blue);
                 var viewProj = Matrix.Multiply(view, proj);
+                world = Matrix.RotationAxis(Vector3.UnitY, clock.ElapsedMilliseconds / 1000f);
                 worldViewProj = world * viewProj;
+
+                //像素着色器计算需要的变量
+                mfxWorld.SetMatrix(world);
+                mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world));
                 mfxWorldViewProj.SetMatrix(worldViewProj);
+
+                //设置光
+                var d = Tools.StructureToBytes(mDirLight);
+                Array.Copy(d, 0, _dirLightArray, 0, Marshal.SizeOf(typeof(DirectionalLight)));
+                using (var dataStream = DataStream.Create(_dirLightArray, false, false)) {
+                    mfxDirLight.SetRawValue(dataStream, _dirLightArray.Length);
+                }
+                d = Tools.StructureToBytes(mPointLight);
+                Array.Copy(d, 0, _pointLightArray, 0, Marshal.SizeOf(typeof(PointLight)));
+                using (var dataStream = DataStream.Create(_pointLightArray, false, false)) {
+                    mfxPointLight.SetRawValue(dataStream, _pointLightArray.Length);
+                }
+                d = Tools.StructureToBytes(mSpotLight);
+                Array.Copy(d, 0, _spotLightArray, 0, Marshal.SizeOf(typeof(SpotLight)));
+                using (var dataStream = DataStream.Create(_spotLightArray, false, false)) {
+                    mfxSpotLight.SetRawValue(dataStream, _spotLightArray.Length);
+                }
+
+                //设置材质
+                d = Tools.StructureToBytes(mSkullMat);
+                Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
+                using (var dataStream = DataStream.Create(_matArray, false, false)) {
+                    mfxMaterial.SetRawValue(dataStream, _matArray.Length);
+                }
+
                 mfxPass.Apply(_d3DDeviceContext);
-                _d3DDeviceContext.Draw(tempVertexEdited.Count, 0);
+                _d3DDeviceContext.DrawIndexed(skullMeshData.Indices.Length, 0, 0);
                 _swapChain.Present(0, PresentFlags.None);
                 fpsCounter++;
                 if (clock.ElapsedMilliseconds - lastTime >= 1000) {
@@ -303,7 +447,7 @@ namespace deleteSharpDX {
         }
         #endregion
     }
-    class Tools {
+    static class Tools {
         /// <summary>
         /// 计算三个点组成的平面的 单位法线向量
         /// </summary>
@@ -311,7 +455,7 @@ namespace deleteSharpDX {
         /// <param name="v2"></param>
         /// <param name="v3"></param>
         /// <returns></returns>
-        public Vector3 ComputeNormal(Vector3 v1, Vector3 v2, Vector3 v3) {
+        public static Vector3 ComputeNormal(Vector3 v1, Vector3 v2, Vector3 v3) {
             Vector3 temp;
             Vector3 u = v2 - v1;
             Vector3 v = v3 - v1;
@@ -328,9 +472,9 @@ namespace deleteSharpDX {
         /// </summary>
         /// <param name="inputVex"></param>
         /// <param name="inputInd"></param>
-        public void ComputeVertexNormal(ref MyVertex[] inputVex, int[] inputInd) {
+        public static void ComputeVertexNormal(ref MyVertex[] inputVex, int[] inputInd) {
             // 遍历每个三角形片元
-            for (int i = 0; i < inputInd.Length/3; i++) {
+            for (int i = 0; i < inputInd.Length / 3; i++) {
                 // 三角形对应的三个顶点索引
                 int i0 = inputInd[i * 3 + 0];
                 int i1 = inputInd[i * 3 + 1];
@@ -359,8 +503,25 @@ namespace deleteSharpDX {
         /// </summary>
         /// <param name="m"></param>
         /// <returns></returns>
-        public Matrix InverseTranspose(Matrix m) {
+        public static Matrix InverseTranspose(Matrix m) {
             return Matrix.Transpose(Matrix.Invert(m));
+        }
+
+        /// <summary>
+        /// 将<T>结构体转化为字节码
+        /// 用于SetRawValue
+        /// </summary>
+        /// <typeparam name="T">结构体类型</typeparam>
+        /// <param name="obj">转化对象</param>
+        /// <returns></returns>
+        public static byte[] StructureToBytes<T>(T obj) where T : struct {
+            var len = Marshal.SizeOf(obj);
+            var buf = new byte[len];
+            var ptr = Marshal.AllocHGlobal(len);
+            Marshal.StructureToPtr(obj, ptr, true);
+            Marshal.Copy(ptr, buf, 0, len);
+            Marshal.FreeHGlobal(ptr);
+            return buf;
         }
     }
 }
