@@ -100,6 +100,7 @@
     <Content Include="doc\imgShowInOne_L.png" />
     <Content Include="doc\imgSPHERE.png" />
     <Content Include="doc\imgZuHe1.png" />
+    <Content Include="model\Pikachu.obj.txt" />
     <Content Include="model\skull.txt" />
     <Content Include="MyShader.fx" />
   </ItemGroup>

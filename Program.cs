@@ -188,12 +188,13 @@ namespace deleteSharpDX {
         /// 初始化
         /// </summary>
         public MySharpDXForm() {
-            mSubMeshData = new MeshData[3];
+            mSubMeshData = new MeshData[1];
             //读取模型
-            ModelReader modelReader = new ModelReader("skull.txt");
-            mSubMeshData[0] = modelReader.meshData;
-            Tools.GeneratePlane(50, 50, 50, 50, out mSubMeshData[1]);
-            Tools.GenerateCylinder(5, 6, 10, 10, 5, out mSubMeshData[2]);
+            ModelReader modelReader = new ModelReader("../../model/skull.txt");
+            //mSubMeshData[0] = modelReader.meshData;
+            mSubMeshData[0] = ModelReader.ReadObj("../../model/Pikachu.obj.txt");
+            //Tools.GeneratePlane(50, 50, 50, 50, out mSubMeshData[1]);
+            //Tools.GenerateCylinder(5, 6, 10, 10, 5, out mSubMeshData[2]);
             Tools.PackMeshDataInOne(mSubMeshData, out mMeshData, out vexNum, out vexOff, out indNum, out indOff);
 
             //初始化光源
@@ -262,7 +263,7 @@ namespace deleteSharpDX {
                 D3D11.DeviceCreationFlags.Debug,
                 swapChainDesc, out _d3DDevice, out _swapChain);
             _d3DDeviceContext = _d3DDevice.ImmediateContext;
-            using (var effectByteCode = ShaderBytecode.CompileFromFile("MyShader.fx", "fx_5_0", ShaderFlags.Debug | ShaderFlags.SkipOptimization)) {
+            using (var effectByteCode = ShaderBytecode.CompileFromFile("../../MyShader.fx", "fx_5_0", ShaderFlags.Debug | ShaderFlags.SkipOptimization)) {
                 var effect = new Effect(_d3DDevice, effectByteCode);
                 var technique = effect.GetTechniqueByName("LightTech");
 
@@ -344,7 +345,7 @@ namespace deleteSharpDX {
                     _resized = false;
                 }
                 _d3DDeviceContext.ClearDepthStencilView(depthView, DepthStencilClearFlags.Depth, 1.0f, 0);
-                _d3DDeviceContext.ClearRenderTargetView(renderView, SharpDX.Color.Blue);
+                _d3DDeviceContext.ClearRenderTargetView(renderView, SharpDX.Color.Black);
                 var viewProj = Matrix.Multiply(view, proj);
 
                 //设置光
@@ -368,8 +369,8 @@ namespace deleteSharpDX {
                     mfxSpotLight.SetRawValue(dataStream, _spotLightArray.Length);
                 }
 
-                //[0]画骷髅头
-                world[0] = Matrix.Translation(new Vector3(0, 10f, 0)) * Matrix.RotationAxis(Vector3.UnitY, clock.ElapsedMilliseconds / 1000f);
+                //[0]画皮卡丘
+                world[0] = Matrix.RotationAxis(Vector3.UnitY, clock.ElapsedMilliseconds / 1000f);
                 //设置每个物体不同的world矩阵
                 worldViewProj = world[0] * viewProj;
 
@@ -388,68 +389,45 @@ namespace deleteSharpDX {
                 mfxPass.Apply(_d3DDeviceContext);
                 _d3DDeviceContext.DrawIndexed(mSubMeshData[0].Indices.Length, indOff[0], vexOff[0]);
 
-                //[1]画平面
-                //world[1] = Matrix.Identity;
-                //设置每个物体不同的world矩阵
-                worldViewProj = world[1] * viewProj;
+                ////[1]画平面
+                ////world[1] = Matrix.Identity;
+                ////设置每个物体不同的world矩阵
+                //worldViewProj = world[1] * viewProj;
 
-                //像素着色器计算需要的变量
-                mfxWorld.SetMatrix(world[1]);
-                mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[1]));
-                mfxWorldViewProj.SetMatrix(worldViewProj);
+                ////像素着色器计算需要的变量
+                //mfxWorld.SetMatrix(world[1]);
+                //mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[1]));
+                //mfxWorldViewProj.SetMatrix(worldViewProj);
 
-                //设置材质
-                d = Tools.StructureToBytes(mMatArray[1]);
-                Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
-                using (var dataStream = DataStream.Create(_matArray, false, false)) {
-                    mfxMaterial.SetRawValue(dataStream, _matArray.Length);
-                }
-
-                mfxPass.Apply(_d3DDeviceContext);
-                _d3DDeviceContext.DrawIndexed(mSubMeshData[1].Indices.Length, indOff[1], vexOff[1]);
-
-                //[2]画圆柱
-                //world[2] = Matrix.Identity;
-                //设置每个物体不同的world矩阵
-                worldViewProj = world[2] * viewProj;
-
-                //像素着色器计算需要的变量
-                mfxWorld.SetMatrix(world[2]);
-                mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[2]));
-                mfxWorldViewProj.SetMatrix(worldViewProj);
-
-                //设置材质
-                d = Tools.StructureToBytes(mMatArray[1]);
-                Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
-                using (var dataStream = DataStream.Create(_matArray, false, false)) {
-                    mfxMaterial.SetRawValue(dataStream, _matArray.Length);
-                }
-
-                mfxPass.Apply(_d3DDeviceContext);
-                _d3DDeviceContext.DrawIndexed(mSubMeshData[2].Indices.Length, indOff[2], vexOff[2]);
-
-                ////画不同的物体
-                //for (int i = 0; i < mSubMeshData.Length; i++) {
-                //    //设置每个物体不同的world矩阵
-                //    worldViewProj = world[i] * viewProj;
-
-                //    //像素着色器计算需要的变量
-                //    mfxWorld.SetMatrix(world[i]);
-                //    mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[i]));
-                //    mfxWorldViewProj.SetMatrix(worldViewProj);
-
-                //    //设置材质
-                //    d = Tools.StructureToBytes(mMatArray[i]);
-                //    Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
-                //    using (var dataStream = DataStream.Create(_matArray, false, false)) {
-                //        mfxMaterial.SetRawValue(dataStream, _matArray.Length);
-                //    }
-
-                //    mfxPass.Apply(_d3DDeviceContext);
-                //    _d3DDeviceContext.DrawIndexed(mSubMeshData[i].Indices.Length, indOff[i], vexOff[i]);
+                ////设置材质
+                //d = Tools.StructureToBytes(mMatArray[1]);
+                //Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
+                //using (var dataStream = DataStream.Create(_matArray, false, false)) {
+                //    mfxMaterial.SetRawValue(dataStream, _matArray.Length);
                 //}
 
+                //mfxPass.Apply(_d3DDeviceContext);
+                //_d3DDeviceContext.DrawIndexed(mSubMeshData[1].Indices.Length, indOff[1], vexOff[1]);
 
+                ////[2]画圆柱
+                ////world[2] = Matrix.Identity;
+                ////设置每个物体不同的world矩阵
+                //worldViewProj = world[2] * viewProj;
+
+                ////像素着色器计算需要的变量
+                //mfxWorld.SetMatrix(world[2]);
+                //mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[2]));
+                //mfxWorldViewProj.SetMatrix(worldViewProj);
+
+                ////设置材质
+                //d = Tools.StructureToBytes(mMatArray[1]);
+                //Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
+                //using (var dataStream = DataStream.Create(_matArray, false, false)) {
+                //    mfxMaterial.SetRawValue(dataStream, _matArray.Length);
+                //}
+
+                //mfxPass.Apply(_d3DDeviceContext);
+                //_d3DDeviceContext.DrawIndexed(mSubMeshData[2].Indices.Length, indOff[2], vexOff[2]);
 
                 _swapChain.Present(0, PresentFlags.None);
                 fpsCounter++;
