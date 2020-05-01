@@ -167,6 +167,15 @@ void ComputeSpotLight(Material mat, SpotLight L,
 	spec *= att;
 }
 
+Texture2D gTexture;
+SamplerState samAnisotropic
+{
+	Filter = ANISOTROPIC;
+	MaxAnisotropy = 4;
+	AddressU = WRAP;
+	AddressV = WRAP;
+};
+
 cbuffer cbPerFrame {
 	DirectionalLight gDirLight;
 	PointLight gPointLight;
@@ -178,18 +187,21 @@ cbuffer cbPerObject {
 	float4x4 gWorld;
 	float4x4 gWorldInvTranspose;
 	float4x4 gWorldViewProj;
+	float4x4 gTexTransform;
 	Material gMaterial;
 };
 
 struct VS_IN {
 	float3 PosL : POSITION;
 	float3 NorL : NORMAL;
+	float2 Tex : TEXTURE;
 };
 
 struct VS_OUT {
 	float4 PosH : SV_POSITION;
 	float3 PosW : POSITION;
 	float3 NorW : NORMAL;
+	float2 Tex : TEXCOORD;
 };
 
 RasterizerState WireFrameRS {
@@ -211,6 +223,8 @@ VS_OUT VS(VS_IN vin) {
 	vout.NorW = mul(vin.NorL, (float3x3)gWorldInvTranspose);
 	// Transform to homogeneous clip space.
 	vout.PosH = mul(float4(vin.PosL, 1.0f), gWorldViewProj);
+
+	vout.Tex = mul(float4(vin.Tex, 0.0f, 1.0f), gTexTransform).xy;
 	return vout;
 }
 
@@ -233,7 +247,12 @@ float4 PS(VS_OUT pin) : SV_Target{
 	ambient += A;
 	diffuse += D;
 	spec += S;
-	float4 litColor = ambient + diffuse + spec;
+	
+	//Œ∆¿Ì
+	float4 texColor = float4(1, 1, 1, 1);
+	texColor = gTexture.Sample(samAnisotropic, pin.Tex);
+	
+	float4 litColor = texColor * (ambient + diffuse) + spec;
 	litColor.a = gMaterial.Diffuse.a;
 	return litColor;
 }

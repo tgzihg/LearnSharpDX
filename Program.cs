@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Runtime.InteropServices;
+using SharpDX.WIC;
 
 namespace deleteSharpDX {
     class Program {
@@ -32,9 +33,11 @@ namespace deleteSharpDX {
     struct MyVertex {
         public Vector3 Position;
         public Vector3 Normal;
-        public MyVertex(Vector3 pos, Vector3 nor) {
+        public Vector2 Tex;
+        public MyVertex(Vector3 pos, Vector3 nor, Vector2 tex) {
             Position = pos;
             Normal = nor;
+            Tex = tex;
         }
     }
     /// <summary>
@@ -135,6 +138,7 @@ namespace deleteSharpDX {
         private D3D11.InputElement[] _inputElementsForMesh = new D3D11.InputElement[] {
                 new D3D11.InputElement("POSITION", 0, Format.R32G32B32_Float, 0),
                 new D3D11.InputElement("NORMAL", 0, Format.R32G32B32_Float, 0),
+                new D3D11.InputElement("TEXTURE", 0, Format.R32G32_Float, 0),
         };
 
         private Matrix proj;
@@ -143,7 +147,7 @@ namespace deleteSharpDX {
         private Matrix worldViewProj;
 
         private Vector3 targetViewDir;
-        Vector3 camPos = new Vector3(0f, 3f, -13.0f);
+        Vector3 camPos = new Vector3(0f, 0f, -5.0f);
         Vector3 camTo = new Vector3(0f, 0f, 0f);
         Vector3 camUp = new Vector3(0f, 1f, 0f);
         private int dx;
@@ -164,6 +168,8 @@ namespace deleteSharpDX {
         private EffectPass mfxPass;
         private EffectMatrixVariable mfxWorld;
         private EffectMatrixVariable mfxWorldTranInv;
+        private EffectShaderResourceVariable mfxShaderRSVar;
+        private EffectMatrixVariable mfxTexTransform;
         private RenderForm _renderForm;
 
         private MeshData mMeshData;
@@ -174,40 +180,45 @@ namespace deleteSharpDX {
         int[] indOff;
 
         DirectionalLight mDirLight;
-        PointLight  mPointLight;
-        SpotLight   mSpotLight;
-        Material[]  mMatArray = new Material[2];
+        PointLight mPointLight;
+        SpotLight mSpotLight;
+        Material[] mMatArray = new Material[1];
         //光照
-        private byte[] _dirLightArray   = new byte[Marshal.SizeOf(typeof(DirectionalLight)) * 1];
+        private byte[] _dirLightArray = new byte[Marshal.SizeOf(typeof(DirectionalLight)) * 1];
         private byte[] _pointLightArray = new byte[Marshal.SizeOf(typeof(PointLight)) * 1];
-        private byte[] _spotLightArray  = new byte[Marshal.SizeOf(typeof(SpotLight)) * 1];
+        private byte[] _spotLightArray = new byte[Marshal.SizeOf(typeof(SpotLight)) * 1];
         //材料
         private byte[] _matArray = new byte[Marshal.SizeOf(typeof(Material)) * 1];
+
+        //贴图
+        private ShaderResourceView ShaderRSV;
 
         /// <summary>
         /// 初始化
         /// </summary>
         public MySharpDXForm() {
             mSubMeshData = new MeshData[1];
+            //纹理贴图——画正方体
+            Tools.GenerateBox(1f, 1f, 1f, out mSubMeshData[0]);
             //读取模型
-            ModelReader modelReader = new ModelReader("../../model/skull.txt");
+            //ModelReader modelReader = new ModelReader("../../model/skull.txt");
             //mSubMeshData[0] = modelReader.meshData;
-            mSubMeshData[0] = ModelReader.ReadObj("../../model/Pikachu.obj.txt");
-            //Tools.GeneratePlane(50, 50, 50, 50, out mSubMeshData[1]);
+            //mSubMeshData[0] = ModelReader.ReadObj("../../model/Pikachu.obj.txt");
+            //Tools.GeneratePlane(50, 50, 50, 50, out mSubMeshData[0]);
             //Tools.GenerateCylinder(5, 6, 10, 10, 5, out mSubMeshData[2]);
             Tools.PackMeshDataInOne(mSubMeshData, out mMeshData, out vexNum, out vexOff, out indNum, out indOff);
 
             //初始化光源
             mDirLight = new DirectionalLight();
-            mDirLight.Ambient   = new Vector4(0.2f, 0.2f, 0.2f, 1.0f);
-            mDirLight.Diffuse   = new Vector4(0.5f, 0.5f, 0.5f, 1.0f);
-            mDirLight.Specular  = new Vector4(0.5f, 0.5f, 0.5f, 1.0f);
+            mDirLight.Ambient = new Vector4(0.2f, 0.2f, 0.2f, 1.0f);
+            mDirLight.Diffuse = new Vector4(0.5f, 0.5f, 0.5f, 1.0f);
+            mDirLight.Specular = new Vector4(0.5f, 0.5f, 0.5f, 1.0f);
             mDirLight.Direction = new Vector3(0.57735f, -0.57735f, 0.57735f);
 
             mPointLight = new PointLight();
             mPointLight.Ambient = new Vector4(0.3f, 0.3f, 0.3f, 1.0f);
             mPointLight.Diffuse = new Vector4(0.7f, 0.7f, 0.7f, 1.0f);
-            mPointLight.Specular= new Vector4(0.7f, 0.7f, 0.7f, 1.0f);
+            mPointLight.Specular = new Vector4(0.7f, 0.7f, 0.7f, 1.0f);
             mPointLight.Att = new Vector3(0.0f, 0.01f, 0.0f);
             mPointLight.Range = 15.0f;
             mPointLight.Position = new Vector3(0.0f, 10f, 0.0f);
@@ -215,21 +226,21 @@ namespace deleteSharpDX {
             mSpotLight = new SpotLight();
             mSpotLight.Ambient = new Vector4(0.0f, 0.0f, 0.0f, 1.0f);
             mSpotLight.Diffuse = new Vector4(1.0f, 1.0f, 0.0f, 1.0f);
-            mSpotLight.Specular= new Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+            mSpotLight.Specular = new Vector4(1.0f, 1.0f, 1.0f, 1.0f);
             mSpotLight.Att = new Vector3(1.0f, 0.0f, 0.0f);
             mSpotLight.Spot = 96.0f;
             mSpotLight.Range = 10000.0f;
             mSpotLight.Position = camPos;
-            mSpotLight.Direction = Vector3.Normalize(camTo-camPos);
+            mSpotLight.Direction = Vector3.Normalize(camTo - camPos);
 
             //材质
-            mMatArray[0].Ambient = new Vector4(0.48f, 0.77f, 0.46f, 1.0f);
-            mMatArray[0].Diffuse = new Vector4(0.48f, 0.77f, 0.46f, 1.0f);
-            mMatArray[0].Specular = new Vector4(0.2f, 0.2f, 0.2f, 16.0f);
+            mMatArray[0].Ambient = new Vector4(0.8f, 0.8f, 0.8f, 1.0f);
+            mMatArray[0].Diffuse = new Vector4(0.6f, 0.7f, 0.4f, 1.0f);
+            mMatArray[0].Specular = new Vector4(0.6f, 0.6f, 0.6f, 1.0f);
 
-            mMatArray[1].Ambient = new Vector4(0.8f, 0.8f, 0.8f, 1.0f);
-            mMatArray[1].Diffuse = new Vector4(0.48f, 0.77f, 0.46f, 1.0f);
-            mMatArray[1].Specular = new Vector4(0.2f, 0.2f, 0.2f, 16.0f);
+            //mMatArray[1].Ambient = new Vector4(0.8f, 0.8f, 0.8f, 1.0f);
+            //mMatArray[1].Diffuse = new Vector4(0.48f, 0.77f, 0.46f, 1.0f);
+            //mMatArray[1].Specular = new Vector4(0.2f, 0.2f, 0.2f, 16.0f);
 
             //[*]常规代码
             DoCommonThings();
@@ -268,23 +279,28 @@ namespace deleteSharpDX {
                 var technique = effect.GetTechniqueByName("LightTech");
 
                 //光照
-                mfxDirLight     = effect.GetVariableByName("gDirLight");
-                mfxPointLight   = effect.GetVariableByName("gPointLight");
-                mfxSpotLight    = effect.GetVariableByName("gSpotLight");
-                
-                mfxEyePosW      = effect.GetVariableByName("gEyePosW");
+                mfxDirLight = effect.GetVariableByName("gDirLight");
+                mfxPointLight = effect.GetVariableByName("gPointLight");
+                mfxSpotLight = effect.GetVariableByName("gSpotLight");
+
+                mfxEyePosW = effect.GetVariableByName("gEyePosW");
 
                 //材质
                 mfxMaterial = effect.GetVariableByName("gMaterial");
+
+                //纹理
+                mfxShaderRSVar = effect.GetVariableByName("gTexture").AsShaderResource();
+                mfxTexTransform = effect.GetVariableByName("gTexTransform").AsMatrix();
 
                 //pass
                 mfxPassW = technique.GetPassByName("P0");
                 mfxPassS = technique.GetPassByName("P1");
                 mfxPass = mfxPassS;
-                
+
                 mfxWorld = effect.GetVariableByName("gWorld").AsMatrix();
                 mfxWorldTranInv = effect.GetVariableByName("gWorldInvTranspose").AsMatrix();
                 mfxWorldViewProj = effect.GetVariableByName("gWorldViewProj").AsMatrix();
+
 
                 var passSignature = mfxPassW.Description.Signature;
                 _inputShaderSignature = ShaderSignature.GetInputSignature(passSignature);
@@ -292,20 +308,20 @@ namespace deleteSharpDX {
             _inputLayout = new D3D11.InputLayout(_d3DDevice, _inputShaderSignature, _inputElementsForMesh);
             var VertexBuffer = D3D11.Buffer.Create<MyVertex>(_d3DDevice, BindFlags.VertexBuffer, mMeshData.Vertices.ToArray());
             var IndexBuffer = D3D11.Buffer.Create<int>(_d3DDevice, BindFlags.IndexBuffer, mMeshData.Indices.ToArray());
+
+            ShaderRSV = Tools.CreateShaderResourceViewFromFile(_d3DDevice, System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "../../model/brick.dds"));
+
             _d3DDeviceContext.InputAssembler.InputLayout = _inputLayout;
             _d3DDeviceContext.InputAssembler.PrimitiveTopology = SharpDX.Direct3D.PrimitiveTopology.TriangleList;
             _d3DDeviceContext.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(VertexBuffer, Utilities.SizeOf<MyVertex>(), 0));
             _d3DDeviceContext.InputAssembler.SetIndexBuffer(IndexBuffer, Format.R32_UInt, 0);
             proj = Matrix.Identity;
             view = Matrix.LookAtLH(camPos, camTo, camUp);
-            world = new Matrix[3];
-            //初始化world矩阵
-            //for (int i = 0; i < world.Length; i++) {
-            //    world[i] = Matrix.Identity;
-            //}
-            world[0] = Matrix.Translation(new Vector3(0, 0, 0));
-            world[1] = Matrix.Translation(new Vector3(0, 0, 0));
-            world[2] = Matrix.Translation(new Vector3(0, 5f, 0));
+            world = new Matrix[1];
+            world[0] = Matrix.Identity;
+            //world[0] = Matrix.Translation(new Vector3(0, 0, 0));
+            //world[1] = Matrix.Translation(new Vector3(0, 0f, 0));
+            //world[2] = Matrix.Translation(new Vector3(0, 5.1f, 0));
             _resized = true;
             Texture2D backBuffer = null;
             RenderTargetView renderView = null;
@@ -315,6 +331,7 @@ namespace deleteSharpDX {
             var clock = new System.Diagnostics.Stopwatch();
             clock.Start();
             int fpsCounter = 0;
+            byte[] d;
             RenderLoop.Run(_renderForm, () => {
                 targetViewDir = new Vector3(targetX, targetY, targetZ);
                 view = Matrix.LookAtLH(camPos, camPos + targetViewDir, camUp);
@@ -348,84 +365,90 @@ namespace deleteSharpDX {
                 _d3DDeviceContext.ClearRenderTargetView(renderView, SharpDX.Color.Black);
                 var viewProj = Matrix.Multiply(view, proj);
 
-                //设置光
-                var d = Tools.StructureToBytes(mDirLight);
+                //设置平行光
+                d = Tools.StructureToBytes(mDirLight);
                 Array.Copy(d, 0, _dirLightArray, 0, Marshal.SizeOf(typeof(DirectionalLight)));
                 using (var dataStream = DataStream.Create(_dirLightArray, false, false)) {
                     mfxDirLight.SetRawValue(dataStream, _dirLightArray.Length);
                 }
+                ////设置点光源
+                //d = Tools.StructureToBytes(mPointLight);
+                //Array.Copy(d, 0, _pointLightArray, 0, Marshal.SizeOf(typeof(PointLight)));
+                //using (var dataStream = DataStream.Create(_pointLightArray, false, false)) {
+                //    mfxPointLight.SetRawValue(dataStream, _pointLightArray.Length);
+                //}
+                ////设置聚焦光
+                //mSpotLight.Position = camPos;
+                //mSpotLight.Direction = Vector3.Normalize(camTo - camPos);
+                //d = Tools.StructureToBytes(mSpotLight);
+                //Array.Copy(d, 0, _spotLightArray, 0, Marshal.SizeOf(typeof(SpotLight)));
+                //using (var dataStream = DataStream.Create(_spotLightArray, false, false)) {
+                //    mfxSpotLight.SetRawValue(dataStream, _spotLightArray.Length);
+                //}
 
-                d = Tools.StructureToBytes(mPointLight);
-                Array.Copy(d, 0, _pointLightArray, 0, Marshal.SizeOf(typeof(PointLight)));
-                using (var dataStream = DataStream.Create(_pointLightArray, false, false)) {
-                    mfxPointLight.SetRawValue(dataStream, _pointLightArray.Length);
-                }
-
-                mSpotLight.Position = camPos;
-                mSpotLight.Direction = Vector3.Normalize(camTo - camPos);
-                d = Tools.StructureToBytes(mSpotLight);
-                Array.Copy(d, 0, _spotLightArray, 0, Marshal.SizeOf(typeof(SpotLight)));
-                using (var dataStream = DataStream.Create(_spotLightArray, false, false)) {
-                    mfxSpotLight.SetRawValue(dataStream, _spotLightArray.Length);
-                }
-
-                //[0]画皮卡丘
-                world[0] = Matrix.RotationAxis(Vector3.UnitY, clock.ElapsedMilliseconds / 1000f);
-                //设置每个物体不同的world矩阵
+                //纹理贴图：画正方体
+                //world[0] = Matrix.RotationAxis(Vector3.UnitY, clock.ElapsedMilliseconds / 1000f);
                 worldViewProj = world[0] * viewProj;
-
                 //像素着色器计算需要的变量
                 mfxWorld.SetMatrix(world[0]);
                 mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[0]));
                 mfxWorldViewProj.SetMatrix(worldViewProj);
-
                 //设置材质
                 d = Tools.StructureToBytes(mMatArray[0]);
                 Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
                 using (var dataStream = DataStream.Create(_matArray, false, false)) {
                     mfxMaterial.SetRawValue(dataStream, _matArray.Length);
                 }
+                //设置纹理
+                mfxShaderRSVar.SetResource(ShaderRSV);
+                mfxTexTransform.SetMatrix(Matrix.Identity);
 
                 mfxPass.Apply(_d3DDeviceContext);
                 _d3DDeviceContext.DrawIndexed(mSubMeshData[0].Indices.Length, indOff[0], vexOff[0]);
 
-                ////[1]画平面
-                ////world[1] = Matrix.Identity;
-                ////设置每个物体不同的world矩阵
-                //worldViewProj = world[1] * viewProj;
+                ////[0]画骷髅
+                //world[0] = Matrix.Translation(0, 10.5f, 0) * Matrix.RotationAxis(Vector3.UnitY, clock.ElapsedMilliseconds / 1000f);
+                //worldViewProj = world[0] * viewProj;
+                ////像素着色器计算需要的变量
+                //mfxWorld.SetMatrix(world[0]);
+                //mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[0]));
+                //mfxWorldViewProj.SetMatrix(worldViewProj);
+                ////设置材质
+                //d = Tools.StructureToBytes(mMatArray[0]);
+                //Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
+                //using (var dataStream = DataStream.Create(_matArray, false, false)) {
+                //    mfxMaterial.SetRawValue(dataStream, _matArray.Length);
+                //}
+                //mfxPass.Apply(_d3DDeviceContext);
+                //_d3DDeviceContext.DrawIndexed(mSubMeshData[0].Indices.Length, indOff[0], vexOff[0]);
 
+                ////[1]画平面
+                //worldViewProj = world[1] * viewProj;
                 ////像素着色器计算需要的变量
                 //mfxWorld.SetMatrix(world[1]);
                 //mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[1]));
                 //mfxWorldViewProj.SetMatrix(worldViewProj);
-
                 ////设置材质
                 //d = Tools.StructureToBytes(mMatArray[1]);
                 //Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
                 //using (var dataStream = DataStream.Create(_matArray, false, false)) {
                 //    mfxMaterial.SetRawValue(dataStream, _matArray.Length);
                 //}
-
                 //mfxPass.Apply(_d3DDeviceContext);
                 //_d3DDeviceContext.DrawIndexed(mSubMeshData[1].Indices.Length, indOff[1], vexOff[1]);
 
                 ////[2]画圆柱
-                ////world[2] = Matrix.Identity;
-                ////设置每个物体不同的world矩阵
                 //worldViewProj = world[2] * viewProj;
-
                 ////像素着色器计算需要的变量
                 //mfxWorld.SetMatrix(world[2]);
                 //mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[2]));
                 //mfxWorldViewProj.SetMatrix(worldViewProj);
-
                 ////设置材质
                 //d = Tools.StructureToBytes(mMatArray[1]);
                 //Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
                 //using (var dataStream = DataStream.Create(_matArray, false, false)) {
                 //    mfxMaterial.SetRawValue(dataStream, _matArray.Length);
                 //}
-
                 //mfxPass.Apply(_d3DDeviceContext);
                 //_d3DDeviceContext.DrawIndexed(mSubMeshData[2].Indices.Length, indOff[2], vexOff[2]);
 
@@ -517,6 +540,11 @@ namespace deleteSharpDX {
         #endregion
     }
     static class Tools {
+        //纹理用
+        private static SharpDX.WIC.ImagingFactory _factory;
+        static Tools() {
+            _factory = new SharpDX.WIC.ImagingFactory();
+        }
         /// <summary>
         /// 计算三个点组成的平面的 单位法线向量
         /// </summary>
@@ -575,7 +603,6 @@ namespace deleteSharpDX {
         public static Matrix InverseTranspose(Matrix m) {
             return Matrix.Transpose(Matrix.Invert(m));
         }
-
         /// <summary>
         /// 将<T>结构体转化为字节码
         /// 用于SetRawValue
@@ -830,6 +857,63 @@ namespace deleteSharpDX {
             outMesh.Indices = tempIndex.ToArray();
             outMesh.Vertices = tempVertice.ToArray();
         }
+        /// <summary>
+        /// 生成贴图正方体
+        /// </summary>
+        /// <param name="length"></param>
+        /// <param name="width"></param>
+        /// <param name="height"></param>
+        /// <param name="outMesh"></param>
+        public static void GenerateBox(float length, float width, float height, out MeshData outMesh) {
+            outMesh = new MeshData(24, 0);
+            float lHalf = 0.5f * length;
+            float hHalf = 0.5f * height;
+            float wHalf = 0.5f * width;
+            //FrontFace
+            outMesh.Vertices[0] = new MyVertex(new Vector3(-lHalf, -hHalf, -wHalf), new Vector3(0, 0, -1), new Vector2(0f, 1f));
+            outMesh.Vertices[1] = new MyVertex(new Vector3(-lHalf, +hHalf, -wHalf), new Vector3(0, 0, -1), new Vector2(0f, 0f));
+            outMesh.Vertices[2] = new MyVertex(new Vector3(+lHalf, +hHalf, -wHalf), new Vector3(0, 0, -1), new Vector2(1f, 0f));
+            outMesh.Vertices[3] = new MyVertex(new Vector3(+lHalf, -hHalf, -wHalf), new Vector3(0, 0, -1), new Vector2(1f, 1f));
+
+            //BackFace
+            outMesh.Vertices[4] = new MyVertex(new Vector3(-lHalf, -hHalf, +wHalf), new Vector3(0, 0, 1), new Vector2(0f, 1f));
+            outMesh.Vertices[5] = new MyVertex(new Vector3(-lHalf, +hHalf, +wHalf), new Vector3(0, 0, 1), new Vector2(0f, 0f));
+            outMesh.Vertices[6] = new MyVertex(new Vector3(+lHalf, +hHalf, +wHalf), new Vector3(0, 0, 1), new Vector2(1f, 0f));
+            outMesh.Vertices[7] = new MyVertex(new Vector3(+lHalf, -hHalf, +wHalf), new Vector3(0, 0, 1), new Vector2(1f, 1f));
+
+            //UpFace
+            outMesh.Vertices[8]     = new MyVertex(new Vector3(-lHalf, +hHalf, -wHalf), new Vector3(0, 1, 0), new Vector2(0f, 0f));
+            outMesh.Vertices[9]     = new MyVertex(new Vector3(-lHalf, +hHalf, +wHalf), new Vector3(0, 1, 0), new Vector2(1f, 0f));
+            outMesh.Vertices[10]    = new MyVertex(new Vector3(+lHalf, +hHalf, +wHalf), new Vector3(0, 1, 0), new Vector2(1f, 1f));
+            outMesh.Vertices[11]    = new MyVertex(new Vector3(+lHalf, +hHalf, -wHalf), new Vector3(0, 1, 0), new Vector2(0f, 1f));
+
+            //downFace
+            outMesh.Vertices[12]    = new MyVertex(new Vector3(-lHalf, -hHalf, +wHalf), new Vector3(0, -1, 0), new Vector2(0f, 1f));
+            outMesh.Vertices[13]    = new MyVertex(new Vector3(-lHalf, -hHalf, -wHalf), new Vector3(0, -1, 0), new Vector2(0f, 0f));
+            outMesh.Vertices[14]    = new MyVertex(new Vector3(+lHalf, -hHalf, -wHalf), new Vector3(0, -1, 0), new Vector2(1f, 0f));
+            outMesh.Vertices[15]    = new MyVertex(new Vector3(+lHalf, -hHalf, +wHalf), new Vector3(0, -1, 0), new Vector2(1f, 1f));
+
+            //rightFace
+            outMesh.Vertices[16] = new MyVertex(new Vector3(+lHalf, -hHalf, -wHalf), new Vector3(1, 0, 0), new Vector2(0f, 1f));
+            outMesh.Vertices[17] = new MyVertex(new Vector3(+lHalf, +hHalf, -wHalf), new Vector3(1, 0, 0), new Vector2(0f, 0f));
+            outMesh.Vertices[18] = new MyVertex(new Vector3(+lHalf, +hHalf, +wHalf), new Vector3(1, 0, 0), new Vector2(1f, 0f));
+            outMesh.Vertices[19] = new MyVertex(new Vector3(+lHalf, -hHalf, +wHalf), new Vector3(1, 0, 0), new Vector2(1f, 1f));
+
+            //leftFace
+            outMesh.Vertices[20] = new MyVertex(new Vector3(-lHalf, -hHalf, +wHalf), new Vector3(-1, 0, 0), new Vector2(0f, 1f));
+            outMesh.Vertices[21] = new MyVertex(new Vector3(-lHalf, +hHalf, +wHalf), new Vector3(-1, 0, 0), new Vector2(0f, 0f));
+            outMesh.Vertices[22] = new MyVertex(new Vector3(-lHalf, +hHalf, -wHalf), new Vector3(-1, 0, 0), new Vector2(1f, 0f));
+            outMesh.Vertices[23] = new MyVertex(new Vector3(-lHalf, -hHalf, -wHalf), new Vector3(-1, 0, 0), new Vector2(1f, 1f));
+
+            outMesh.Indices = new int[] {
+                0, 1, 2, 2, 3, 0,       // front
+                4, 5, 6, 6, 7, 4,       // back
+                8, 9, 10, 10, 11, 8,    // up
+                12,13,14,14,15,12,      // down
+                16,17,18,18,19,16,      // right
+                20,21,22,22,23,20,      // left
+            };
+        }
         #endregion
         /// <summary>
         /// 将输入的结构打包成一个，显示出来
@@ -837,10 +921,10 @@ namespace deleteSharpDX {
         /// <param name="source"></param>
         /// <param name="dest"></param>
         public static void PackMeshDataInOne(MeshData[] source, out MeshData dest,
-            out int[] vexNum, out int[] vexOffset,
-            out int[] indNum, out int[] indOffset) {
-            vexNum    = new int[source.Length];
-            indNum    = new int[source.Length];
+        out int[] vexNum, out int[] vexOffset,
+        out int[] indNum, out int[] indOffset) {
+            vexNum = new int[source.Length];
+            indNum = new int[source.Length];
             vexOffset = new int[source.Length];
             indOffset = new int[source.Length];
             vexOffset[0] = 0;
@@ -848,7 +932,7 @@ namespace deleteSharpDX {
             for (int i = 0; i < source.Length; i++) {
                 vexNum[i] = source[i].Vertices.Length;
                 indNum[i] = source[i].Indices.Length;
-                if (i+1 >= vexOffset.Length) {
+                if (i + 1 >= vexOffset.Length) {
                     break;
                 }
                 vexOffset[i + 1] += vexOffset[i] + vexNum[i];
@@ -868,6 +952,51 @@ namespace deleteSharpDX {
             }
             dest = new MeshData() { Vertices = vertexsInOne.ToArray(), Indices = indicesInOne.ToArray() };
         }
-
+        /// <summary>
+        /// 参考自:https://github.com/sharpdx/SharpDX-Samples/blob/master/StoreApp/OldSamplesToBeBackPorted/CommonDX/TextureLoader.cs 和noire项目
+        /// </summary>
+        /// <param name="device">设备对象</param>
+        /// <param name="bitmapSource"></param>
+        /// <returns></returns>
+        public static SharpDX.Direct3D11.ShaderResourceView CreateShaderResourceViewFromFile(SharpDX.Direct3D11.Device device, string fileName) {
+            Texture2D tempTex;
+            using (var bitmapSource = LoadBitmapSourceFromFile(_factory, fileName)) {
+                // Allocate DataStream to receive the WIC image pixels
+                int stride = bitmapSource.Size.Width * 4;
+                using (var buffer = new SharpDX.DataStream(bitmapSource.Size.Height * stride, true, true)) {
+                    // Copy the content of the WIC to the buffer
+                    bitmapSource.CopyPixels(stride, buffer);
+                    tempTex = new SharpDX.Direct3D11.Texture2D(
+                        device,
+                        new SharpDX.Direct3D11.Texture2DDescription() {
+                            Width = bitmapSource.Size.Width,
+                            Height = bitmapSource.Size.Height,
+                            ArraySize = 1,
+                            BindFlags = SharpDX.Direct3D11.BindFlags.ShaderResource,
+                            Usage = SharpDX.Direct3D11.ResourceUsage.Immutable,
+                            CpuAccessFlags = SharpDX.Direct3D11.CpuAccessFlags.None,
+                            Format = SharpDX.DXGI.Format.R8G8B8A8_UNorm,
+                            MipLevels = 1,
+                            OptionFlags = SharpDX.Direct3D11.ResourceOptionFlags.None,
+                            SampleDescription = new SharpDX.DXGI.SampleDescription(1, 0),
+                        },
+                        new SharpDX.DataRectangle(buffer.DataPointer, stride));
+                    bitmapSource.Dispose();
+                }
+            }
+            return new ShaderResourceView(device, tempTex);
+        }
+        public static BitmapSource LoadBitmapSourceFromFile(ImagingFactory factory, string filename) {
+            using (var bitmapDecoder = new BitmapDecoder(factory, filename, DecodeOptions.CacheOnDemand)) {
+                var result = new FormatConverter(factory);
+                using (var bitmapFrameDecode = bitmapDecoder.GetFrame(0)) {
+                    result.Initialize(bitmapFrameDecode, PixelFormat.Format32bppPRGBA, BitmapDitherType.None, null, 0, BitmapPaletteType.Custom);
+                }
+                return result;
+            }
+        }
+        public static void Dispose() {
+            Utilities.Dispose(ref _factory);
+        }
     }
 }

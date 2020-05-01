@@ -29,7 +29,8 @@ namespace deleteSharpDX {
                 strs = line.Split(' ');
                 tempVertex.Add(new MyVertex(
                     new SharpDX.Vector3(float.Parse(strs[0]), float.Parse(strs[1]), float.Parse(strs[2])),
-                    new SharpDX.Vector3(float.Parse(strs[3]), float.Parse(strs[4]), float.Parse(strs[5]))
+                    new SharpDX.Vector3(float.Parse(strs[3]), float.Parse(strs[4]), float.Parse(strs[5])),
+                    new SharpDX.Vector2(0,0)
                     ));
                 if (tempVertex.Count == vertexCount) {
                     break;
