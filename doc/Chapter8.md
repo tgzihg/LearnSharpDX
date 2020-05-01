@@ -158,3 +158,70 @@ float4 litColor = texColor * (ambient + diffuse) + spec;
 结果：
 
 ![纹理](texture.png "简单纹理")
+
+## 8.8 纹理贴图方式(Address Modes)
+
+纹理映射，结合常量/线性插值，其实就是一个函数映射关系：纹理坐标(u,b)-->(r,g,b,a)。D3D可以让我们以四种方式扩展：wrap, border color, clamp, mirror.
+- wrap:重复(默认)
+- border color:将[0,1]之外的纹理坐标映射为一个颜色
+- clamp:将[0,1]之外的颜色映射为某点的颜色，该点为[0,1]^2范围内的与所求点距离最小的那个点。
+- mirror:镜像
+
+### Wrap
+设置纹理坐标在[0,0]->[2,2]。
+
+fx文件:
+```cpp
+SamplerState samAnisotropic
+{
+	Filter = ANISOTROPIC;
+	MaxAnisotropy = 4;
+	AddressU = WRAP;
+	AddressV = WRAP;
+};
+```
+
+![纹理-Wrap](tex_wrap.png "纹理-wrap")
+
+设置纹理坐标在[0,0]->[2,2]。
+
+fx文件:
+```cpp
+SamplerState samAnisotropic
+{
+	Filter = ANISOTROPIC;
+	MaxAnisotropy = 4;
+	AddressU = MIRROR;
+	AddressV = MIRROR;
+};
+```
+
+![纹理-Mirror](tex_mirror.png "纹理-mirror")
+
+将其中的`AddressV`设置为`WRAP`：
+
+![纹理-Mirror-Wrap](tex_mirror_wrap.png "纹理-mirror-wrap")
+
+设置SamplerState为Border，并重新设置纹理坐标为左上角[-0.5,-0.5]->右下角[2,2]：
+
+```cpp
+SamplerState samAnisotropic
+{
+	Filter = ANISOTROPIC;
+	MaxAnisotropy = 4;
+	AddressU = BORDER;
+	AddressV = BORDER;
+	BorderColor = float4(0, 0, 1, 1);
+};
+```
+![纹理-Border](tex_border.png "纹理-border")
+
+设置补全方式为Clamp
+
+![纹理-Clamp](tex_clamp.png "纹理-clamp")
+
+设置U向为Clamp，V向为Mirror：
+
+![纹理-Clamp-Mirror](tex_clamp_mirror.png "纹理-clamp-mirror")
+
+(P.S.) 可以对不同方向设置独立的不同的补全方式。

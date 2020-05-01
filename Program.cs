@@ -309,7 +309,7 @@ namespace deleteSharpDX {
             var VertexBuffer = D3D11.Buffer.Create<MyVertex>(_d3DDevice, BindFlags.VertexBuffer, mMeshData.Vertices.ToArray());
             var IndexBuffer = D3D11.Buffer.Create<int>(_d3DDevice, BindFlags.IndexBuffer, mMeshData.Indices.ToArray());
 
-            ShaderRSV = Tools.CreateShaderResourceViewFromFile(_d3DDevice, System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "../../model/brick.dds"));
+            ShaderRSV = Tools.CreateShaderResourceViewFromFile(_d3DDevice, System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "../../model/ydmy.jpg"));
 
             _d3DDeviceContext.InputAssembler.InputLayout = _inputLayout;
             _d3DDeviceContext.InputAssembler.PrimitiveTopology = SharpDX.Direct3D.PrimitiveTopology.TriangleList;
@@ -870,10 +870,10 @@ namespace deleteSharpDX {
             float hHalf = 0.5f * height;
             float wHalf = 0.5f * width;
             //FrontFace
-            outMesh.Vertices[0] = new MyVertex(new Vector3(-lHalf, -hHalf, -wHalf), new Vector3(0, 0, -1), new Vector2(0f, 1f));
-            outMesh.Vertices[1] = new MyVertex(new Vector3(-lHalf, +hHalf, -wHalf), new Vector3(0, 0, -1), new Vector2(0f, 0f));
-            outMesh.Vertices[2] = new MyVertex(new Vector3(+lHalf, +hHalf, -wHalf), new Vector3(0, 0, -1), new Vector2(1f, 0f));
-            outMesh.Vertices[3] = new MyVertex(new Vector3(+lHalf, -hHalf, -wHalf), new Vector3(0, 0, -1), new Vector2(1f, 1f));
+            outMesh.Vertices[0] = new MyVertex(new Vector3(-lHalf, -hHalf, -wHalf), new Vector3(0, 0, -1), new Vector2(-0.5f, 2f));
+            outMesh.Vertices[1] = new MyVertex(new Vector3(-lHalf, +hHalf, -wHalf), new Vector3(0, 0, -1), new Vector2(-0.5f, -0.5f));
+            outMesh.Vertices[2] = new MyVertex(new Vector3(+lHalf, +hHalf, -wHalf), new Vector3(0, 0, -1), new Vector2(2f, -0.5f));
+            outMesh.Vertices[3] = new MyVertex(new Vector3(+lHalf, -hHalf, -wHalf), new Vector3(0, 0, -1), new Vector2(2f, 2f));
 
             //BackFace
             outMesh.Vertices[4] = new MyVertex(new Vector3(-lHalf, -hHalf, +wHalf), new Vector3(0, 0, 1), new Vector2(0f, 1f));
