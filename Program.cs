@@ -332,9 +332,25 @@ namespace deleteSharpDX {
             clock.Start();
             int fpsCounter = 0;
             byte[] d;
+
+            // for camera
+            Vector4 ux = new Vector4(1, 0, 0, 0);
+            Vector4 uy = new Vector4(0, 1, 0, 0);
+            Vector4 uz = new Vector4(0, 0, 1, 0);
+            Vector4 pos = new Vector4(0, 0, -5, 1);
+            float t;
+            view = new Matrix();
             RenderLoop.Run(_renderForm, () => {
                 targetViewDir = new Vector3(targetX, targetY, targetZ);
-                view = Matrix.LookAtLH(camPos, camPos + targetViewDir, camUp);
+                //view = Matrix.LookAtLH(camPos, camPos + targetViewDir, camUp);
+                view.Row1 = ux;
+                view.Row2 = uy;
+                view.Row3 = uz;
+                t = (float)Math.Cos(clock.ElapsedMilliseconds / 100f) - 3f;
+
+                view.Row4 = new Vector4(0, 0, t, 1);
+                view = Matrix.Invert(view);
+
                 if (_resized) {
                     Utilities.Dispose(ref backBuffer);
                     Utilities.Dispose(ref renderView);

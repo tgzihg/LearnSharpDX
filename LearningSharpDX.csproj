@@ -92,6 +92,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="doc\Chapter14.md" />
     <None Include="doc\Chapter7.md" />
     <None Include="doc\Chapter8.md" />
     <None Include="packages.config" />
