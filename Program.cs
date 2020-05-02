@@ -11,6 +11,7 @@ using System.Linq;
 using System.Threading;
 using System.Runtime.InteropServices;
 using SharpDX.WIC;
+using Assimp;
 
 namespace deleteSharpDX {
     class Program {
@@ -150,7 +151,7 @@ namespace deleteSharpDX {
         Vector3 camRight = new Vector3(1, 0, 0);
         Vector3 camUp = new Vector3(0, 1, 0);
         Vector3 camLook = new Vector3(0, 0, 1);
-        Vector3 camPos = new Vector3(0, 0, -5);
+        Vector3 camPos = new Vector3(0, 120, -330);
 
         private System.Drawing.Point _lastMousePoint;
         private bool _resized;
@@ -169,7 +170,7 @@ namespace deleteSharpDX {
         private RenderForm _renderForm;
 
         private MeshData mMeshData;
-        private MeshData[] mSubMeshData;
+        static public MeshData[] mSubMeshData;
         int[] vexNum;
         int[] vexOff;
         int[] indNum;
@@ -193,9 +194,14 @@ namespace deleteSharpDX {
         /// 初始化
         /// </summary>
         public MySharpDXForm() {
-            mSubMeshData = new MeshData[1];
+            mSubMeshData = Tools.LoadModelFromFile("../../model/IronMan.obj");
+            List<MeshData> meshDatas = mSubMeshData.ToList();
+            MeshData planeMesh;
+            Tools.GeneratePlane(1000, 1000, 100, 100, out planeMesh);
+            meshDatas.Add(planeMesh);
+            mSubMeshData = meshDatas.ToArray();
             //纹理贴图——画正方体
-            Tools.GenerateBox(1f, 1f, 1f, out mSubMeshData[0]);
+            //Tools.GenerateBox(1f, 1f, 1f, out mSubMeshData[0]);
             Tools.PackMeshDataInOne(mSubMeshData, out mMeshData, out vexNum, out vexOff, out indNum, out indOff);
 
             //初始化光源
@@ -302,8 +308,11 @@ namespace deleteSharpDX {
             _d3DDeviceContext.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(VertexBuffer, Utilities.SizeOf<MyVertex>(), 0));
             _d3DDeviceContext.InputAssembler.SetIndexBuffer(IndexBuffer, Format.R32_UInt, 0);
             proj = Matrix.Identity;
-            world = new Matrix[1];
-            world[0] = Matrix.Identity;
+            world = new Matrix[228];
+            for (int i = 0; i < 228; i++) {
+                world[i] = Matrix.Identity;
+            }
+            //world[0] = Matrix.Identity;
             _resized = true;
             Texture2D backBuffer = null;
             RenderTargetView renderView = null;
@@ -359,11 +368,33 @@ namespace deleteSharpDX {
                 }
 
                 //纹理贴图：画正方体
-                world[0] = Matrix.RotationAxis(Vector3.UnitY, clock.ElapsedMilliseconds / 1000f);
-                worldViewProj = world[0] * viewProj;
+                //world[0] = Matrix.RotationAxis(Vector3.UnitY, clock.ElapsedMilliseconds / 1000f);
+                for (int i = 0; i < mSubMeshData.Length - 1; i++) {
+                    world[i] = Matrix.RotationAxis(Vector3.UnitY, clock.ElapsedMilliseconds / 1000f);
+                    worldViewProj = world[i] * viewProj;
+                    //像素着色器计算需要的变量
+                    mfxWorld.SetMatrix(world[i]);
+                    mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[i]));
+                    mfxWorldViewProj.SetMatrix(worldViewProj);
+                    //设置材质
+                    d = Tools.StructureToBytes(mMatArray[0]);
+                    Array.Copy(d, 0, _matArray, 0, Marshal.SizeOf(typeof(Material))); // 结构体大小
+                    using (var dataStream = DataStream.Create(_matArray, false, false)) {
+                        mfxMaterial.SetRawValue(dataStream, _matArray.Length);
+                    }
+                    //设置纹理
+                    mfxShaderRSVar.SetResource(ShaderRSV);
+                    mfxTexTransform.SetMatrix(Matrix.Identity);
+
+                    mfxPass.Apply(_d3DDeviceContext);
+                    _d3DDeviceContext.DrawIndexed(mSubMeshData[i].Indices.Length, indOff[i], vexOff[i]);
+                }
+
+                //平面
+                worldViewProj = Matrix.Identity * viewProj;
                 //像素着色器计算需要的变量
-                mfxWorld.SetMatrix(world[0]);
-                mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(world[0]));
+                mfxWorld.SetMatrix(Matrix.Identity);
+                mfxWorldTranInv.SetMatrix(Tools.InverseTranspose(Matrix.Identity));
                 mfxWorldViewProj.SetMatrix(worldViewProj);
                 //设置材质
                 d = Tools.StructureToBytes(mMatArray[0]);
@@ -374,9 +405,8 @@ namespace deleteSharpDX {
                 //设置纹理
                 mfxShaderRSVar.SetResource(ShaderRSV);
                 mfxTexTransform.SetMatrix(Matrix.Identity);
-
                 mfxPass.Apply(_d3DDeviceContext);
-                _d3DDeviceContext.DrawIndexed(mSubMeshData[0].Indices.Length, indOff[0], vexOff[0]);
+                _d3DDeviceContext.DrawIndexed(mSubMeshData[228].Indices.Length, indOff[228], vexOff[228]);
 
                 _swapChain.Present(0, PresentFlags.None);
                 fpsCounter++;
@@ -445,22 +475,22 @@ namespace deleteSharpDX {
                     break;
                 //移动摄像机：
                 case System.Windows.Forms.Keys.W:
-                    camPos += camLook * 0.1f;
+                    camPos += camLook * 1f;
                     break;
                 case System.Windows.Forms.Keys.S:
-                    camPos -= camLook * 0.1f;
+                    camPos -= camLook * 1f;
                     break;
                 case System.Windows.Forms.Keys.A:
-                    camPos -= camRight * 0.1f;
+                    camPos -= camRight * 1f;
                     break;
                 case System.Windows.Forms.Keys.D:
-                    camPos += camRight * 0.1f;
+                    camPos += camRight * 1f;
                     break;
                 case System.Windows.Forms.Keys.Space:
-                    camPos.Y += 0.1f;
+                    camPos.Y += 1f;
                     break;
                 case System.Windows.Forms.Keys.Z:
-                    camPos.Y -= 0.1f;
+                    camPos.Y -= 1f;
                     break;
                 case System.Windows.Forms.Keys.Escape:
                     _renderForm.Close();
@@ -821,16 +851,16 @@ namespace deleteSharpDX {
             outMesh.Vertices[7] = new MyVertex(new Vector3(+lHalf, -hHalf, +wHalf), new Vector3(0, 0, 1), new Vector2(1f, 1f));
 
             //UpFace
-            outMesh.Vertices[8]     = new MyVertex(new Vector3(-lHalf, +hHalf, -wHalf), new Vector3(0, 1, 0), new Vector2(0f, 0f));
-            outMesh.Vertices[9]     = new MyVertex(new Vector3(-lHalf, +hHalf, +wHalf), new Vector3(0, 1, 0), new Vector2(1f, 0f));
-            outMesh.Vertices[10]    = new MyVertex(new Vector3(+lHalf, +hHalf, +wHalf), new Vector3(0, 1, 0), new Vector2(1f, 1f));
-            outMesh.Vertices[11]    = new MyVertex(new Vector3(+lHalf, +hHalf, -wHalf), new Vector3(0, 1, 0), new Vector2(0f, 1f));
+            outMesh.Vertices[8] = new MyVertex(new Vector3(-lHalf, +hHalf, -wHalf), new Vector3(0, 1, 0), new Vector2(0f, 0f));
+            outMesh.Vertices[9] = new MyVertex(new Vector3(-lHalf, +hHalf, +wHalf), new Vector3(0, 1, 0), new Vector2(1f, 0f));
+            outMesh.Vertices[10] = new MyVertex(new Vector3(+lHalf, +hHalf, +wHalf), new Vector3(0, 1, 0), new Vector2(1f, 1f));
+            outMesh.Vertices[11] = new MyVertex(new Vector3(+lHalf, +hHalf, -wHalf), new Vector3(0, 1, 0), new Vector2(0f, 1f));
 
             //downFace
-            outMesh.Vertices[12]    = new MyVertex(new Vector3(-lHalf, -hHalf, +wHalf), new Vector3(0, -1, 0), new Vector2(0f, 1f));
-            outMesh.Vertices[13]    = new MyVertex(new Vector3(-lHalf, -hHalf, -wHalf), new Vector3(0, -1, 0), new Vector2(0f, 0f));
-            outMesh.Vertices[14]    = new MyVertex(new Vector3(+lHalf, -hHalf, -wHalf), new Vector3(0, -1, 0), new Vector2(1f, 0f));
-            outMesh.Vertices[15]    = new MyVertex(new Vector3(+lHalf, -hHalf, +wHalf), new Vector3(0, -1, 0), new Vector2(1f, 1f));
+            outMesh.Vertices[12] = new MyVertex(new Vector3(-lHalf, -hHalf, +wHalf), new Vector3(0, -1, 0), new Vector2(0f, 1f));
+            outMesh.Vertices[13] = new MyVertex(new Vector3(-lHalf, -hHalf, -wHalf), new Vector3(0, -1, 0), new Vector2(0f, 0f));
+            outMesh.Vertices[14] = new MyVertex(new Vector3(+lHalf, -hHalf, -wHalf), new Vector3(0, -1, 0), new Vector2(1f, 0f));
+            outMesh.Vertices[15] = new MyVertex(new Vector3(+lHalf, -hHalf, +wHalf), new Vector3(0, -1, 0), new Vector2(1f, 1f));
 
             //rightFace
             outMesh.Vertices[16] = new MyVertex(new Vector3(+lHalf, -hHalf, -wHalf), new Vector3(1, 0, 0), new Vector2(0f, 1f));
@@ -934,8 +964,37 @@ namespace deleteSharpDX {
                 return result;
             }
         }
-        public static void Dispose() {
-            Utilities.Dispose(ref _factory);
+        public static MeshData[] LoadModelFromFile(string filename) {
+            var importer = new AssimpContext();
+            if (!importer.IsImportFormatSupported(System.IO.Path.GetExtension(filename))) {
+                throw new ArgumentException($"Model format {System.IO.Path.GetExtension(filename)} is not supported. Cannot load {filename}.", nameof(filename));
+            }
+            var postProcessFlags = PostProcessSteps.GenerateSmoothNormals | PostProcessSteps.CalculateTangentSpace;
+            var model = importer.ImportFile(filename, postProcessFlags);
+            List<MeshData> meshDatas = new List<MeshData>(model.MeshCount);
+            MeshData meshData = new MeshData();
+            foreach (var mesh in model.Meshes) {
+                List<MyVertex> myVertices = new List<MyVertex>(mesh.VertexCount);
+                for (int i = 0; i < mesh.VertexCount; i++) {
+                    var pos = mesh.HasVertices ? mesh.Vertices[i].ToVector3() : new Vector3();
+
+                    var norm = mesh.HasNormals ? mesh.Normals[i] : new Vector3D();
+                    var texC = mesh.HasTextureCoords(0) ? mesh.TextureCoordinateChannels[0][i] : new Vector3D(1, 1, 0);
+                    var v = new MyVertex(pos, norm.ToVector3(), texC.ToVector2());
+                    myVertices.Add(v);
+                }
+                var indices = mesh.GetIndices().ToList();
+                meshData.Vertices = myVertices.ToArray();
+                meshData.Indices = indices.ToArray();
+                meshDatas.Add(meshData);
+            }
+            return meshDatas.ToArray();
+        }
+        public static Vector3 ToVector3(this Vector3D v) {
+            return new Vector3(v.X, v.Y, v.Z);
+        }
+        public static Vector2 ToVector2(this Vector3D v) {
+            return new Vector2(v.X, v.Y);
         }
     }
 }
